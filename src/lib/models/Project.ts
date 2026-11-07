@@ -1,4 +1,12 @@
-import { Schema, model, models, type InferSchemaType } from "mongoose";
+import { Schema, model, models, type Document, type Types } from "mongoose";
+
+export interface ProjectDoc extends Document<Types.ObjectId> {
+  name: string;
+  owner: Types.ObjectId;
+  members: Types.ObjectId[];
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 const projectSchema = new Schema(
   {
@@ -8,9 +16,5 @@ const projectSchema = new Schema(
   },
   { timestamps: true }
 );
-
-export type ProjectDoc = InferSchemaType<typeof projectSchema> & {
-  _id: import("mongoose").Types.ObjectId;
-};
 
 export const Project = models.Project ?? model<ProjectDoc>("Project", projectSchema);

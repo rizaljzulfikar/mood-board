@@ -1,4 +1,12 @@
-import { Schema, model, models, type InferSchemaType } from "mongoose";
+import { Schema, model, models, type Document, type Types } from "mongoose";
+
+export interface UserDoc extends Document<Types.ObjectId> {
+  email: string;
+  name: string;
+  passwordHash: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 const userSchema = new Schema(
   {
@@ -15,7 +23,5 @@ const userSchema = new Schema(
   },
   { timestamps: true }
 );
-
-export type UserDoc = InferSchemaType<typeof userSchema> & { _id: import("mongoose").Types.ObjectId };
 
 export const User = models.User ?? model<UserDoc>("User", userSchema);

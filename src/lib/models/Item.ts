@@ -1,4 +1,22 @@
-import { Schema, model, models, type InferSchemaType } from "mongoose";
+import { Schema, model, models, type Document, type Types } from "mongoose";
+
+export interface ItemDoc extends Document<Types.ObjectId> {
+  project: Types.ObjectId;
+  objectKey: string;
+  originalName: string;
+  mime: string;
+  size: number;
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  rotation: number;
+  z: number;
+  addedBy: Types.ObjectId;
+  deletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 const itemSchema = new Schema(
   {
@@ -18,9 +36,5 @@ const itemSchema = new Schema(
   },
   { timestamps: true }
 );
-
-export type ItemDoc = InferSchemaType<typeof itemSchema> & {
-  _id: import("mongoose").Types.ObjectId;
-};
 
 export const Item = models.Item ?? model<ItemDoc>("Item", itemSchema);
