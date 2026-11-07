@@ -220,3 +220,243 @@ body {
   color: #a0a0ae;
   font-size: 14px;
 }
+
+/* ---------- board / canvas ---------- */
+
+.board {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #0c0c10;
+  background-image: radial-gradient(circle, #23232b 1px, transparent 1px);
+  background-size: 28px 28px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.board:active {
+  cursor: grabbing;
+}
+
+.world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.board-item {
+  position: absolute;
+  background: #17171d;
+  box-shadow: 0 2px 14px rgb(0 0 0 / 0.45);
+  border-radius: 3px;
+  cursor: move;
+}
+
+.board-item img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  border-radius: 3px;
+}
+
+.board-item.selected {
+  outline: 2px solid #5b7cfa;
+  outline-offset: 2px;
+}
+
+.resize-handle {
+  position: absolute;
+  right: -8px;
+  bottom: -8px;
+  width: 16px;
+  height: 16px;
+  background: #5b7cfa;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  cursor: nwse-resize;
+}
+
+.presence-cursor {
+  position: absolute;
+  pointer-events: none;
+  z-index: 50;
+  transform: translate(-2px, -2px);
+}
+
+.presence-cursor::before {
+  content: "➤";
+  color: var(--pc, #8fa4ff);
+  font-size: 16px;
+  display: block;
+  transform: rotate(-45deg);
+}
+
+.presence-cursor span {
+  position: absolute;
+  left: 14px;
+  top: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--pc, #8fa4ff);
+  color: #101014;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.empty-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 14px 22px;
+  border: 1px dashed #3a3a46;
+  border-radius: 10px;
+  color: #8a8a98;
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  border: 3px dashed #5b7cfa;
+  background: rgb(91 124 250 / 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8fa4ff;
+  font-size: 18px;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.upload-toast {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  background: #17171d;
+  border: 1px solid #2c2c36;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #e8e8ee;
+  z-index: 60;
+}
+
+/* ---------- toolbar ---------- */
+
+.board-toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 70;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  background: rgb(16 16 20 / 0.88);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid #26262e;
+}
+
+.toolbar-left,
+.toolbar-center,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toolbar-title {
+  font-weight: 600;
+  font-size: 14px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar .ghost-button {
+  text-decoration: none;
+  display: inline-block;
+}
+
+.primary-button {
+  padding: 7px 14px;
+  border: none;
+  border-radius: 8px;
+  background: #5b7cfa;
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.zoom-pill {
+  min-width: 46px;
+  text-align: center;
+  font-size: 13px;
+  color: #a0a0ae;
+}
+
+.presence-list {
+  display: flex;
+  gap: 6px;
+}
+
+.presence-chip {
+  padding: 3px 10px;
+  border: 1.5px solid #2c2c36;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e8e8ee;
+}
+
+.member-info {
+  font-size: 13px;
+  color: #a0a0ae;
+}
+
+.share-form {
+  display: flex;
+  gap: 6px;
+}
+
+.share-form input {
+  width: 180px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid #2c2c36;
+  background: #101014;
+  color: #e8e8ee;
+  font-size: 13px;
+  outline: none;
+}
+
+.share-form input:focus {
+  border-color: #5b7cfa;
+}
+
+.share-error {
+  color: #ff7b7b;
+  font-size: 12px;
+  max-width: 160px;
+}

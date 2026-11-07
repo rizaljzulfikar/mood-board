@@ -29,7 +29,7 @@ export function itemJSON(item: ItemDoc) {
     rotation: item.rotation,
     z: item.z,
     addedBy: String(item.addedBy),
-    createdAt: item.createdAt,
-    updatedAt: item.updatedAt,
+    createdAt: item.createdAt.toISOString(),
+    updatedAt: item.updatedAt.toISOString(),
   };
 }
