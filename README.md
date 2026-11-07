@@ -41,3 +41,12 @@ npm run dev                 # http://localhost:3000
 | `npm run build` | production build           |
 | `npm start`     | serve production build     |
 | `npm test`      | vitest unit tests          |
+
+## Notes
+
+- All API JSON uses `id` for document identifiers (not Mongo's `_id`).
+- Items are soft-deleted so other clients learn about removals on their next
+  2-second sync; project deletion hard-deletes items and their MinIO objects.
+- Sessions are cookie-based (`mb_token`, httpOnly, SameSite=Lax). The app is
+  designed for local/plain-HTTP self-hosting; `secure: false` is deliberate.
+

@@ -1,5 +1,6 @@
 import { Types } from "mongoose";
 import { apiError, ApiError, json, requireMember } from "@/lib/api";
+import { connectDB } from "@/lib/db";
 import { Item } from "@/lib/models/Item";
 import { itemJSON } from "@/lib/items";
 
@@ -11,6 +12,9 @@ const MAX_DIM = 8000;
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
+    // Connect before querying: on a cold process, a buffered query without a
+    // connection would time out as a 500.
+    await connectDB();
     if (!Types.ObjectId.isValid(id)) throw new ApiError(404, "Item not found");
     const item = await Item.findById(id);
     if (!item || item.deletedAt) throw new ApiError(404, "Item not found");
@@ -45,6 +49,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
+    await connectDB();
     if (!Types.ObjectId.isValid(id)) throw new ApiError(404, "Item not found");
     const item = await Item.findById(id);
     if (!item || item.deletedAt) throw new ApiError(404, "Item not found");

@@ -1,12 +1,18 @@
 import { Types } from "mongoose";
 import { imageSize } from "image-size";
 import { apiError, json, requireMember } from "@/lib/api";
-import { Item } from "@/lib/models/Item";
+import { Item, type ItemDoc } from "@/lib/models/Item";
 import { buildObjectKey } from "@/lib/storage-key";
 import { putObjectBuffer } from "@/lib/minio";
 import { MAX_UPLOAD_BYTES, extFromMime, itemJSON } from "@/lib/items";
 
 export const runtime = "nodejs";
+
+/** Parse an upload coordinate: any non-finite input falls back to 0. */
+function toCoord(value: FormDataEntryValue | null): number {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -40,16 +46,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       return json({ error: "Unsupported or corrupt image" }, 415);
     }
 
-    const x = Number(form.get("x") ?? 0) || 0;
-    const y = Number(form.get("y") ?? 0) || 0;
+    const x = toCoord(form.get("x"));
+    const y = toCoord(form.get("y"));
     const top = await Item.findOne({ project: project._id }).sort({ z: -1 }).select("z");
     const z = (top?.z ?? 0) + 1;
 
     const itemId = new Types.ObjectId();
-    const item = await Item.create({
+    const objectKey = buildObjectKey(String(project._id), String(itemId), ext);
+    const doc = {
       _id: itemId,
       project: project._id,
-      objectKey: buildObjectKey(String(project._id), String(itemId), ext),
+      objectKey,
       originalName: file.name || `image.${ext}`,
       mime: file.type,
       size: file.size,
@@ -61,9 +68,31 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       z,
       addedBy: new Types.ObjectId(user.id),
       deletedAt: null,
-    });
+    };
 
-    await putObjectBuffer(item.objectKey, buffer, item.mime);
+    // Object first: if storage fails, no record exists and the board stays clean.
+    try {
+      await putObjectBuffer(objectKey, buffer, file.type);
+    } catch (e) {
+      console.error("[items] object upload failed:", e);
+      return json({ error: "Could not store the image, please try again" }, 500);
+    }
+
+    let item: ItemDoc;
+    try {
+      item = await Item.create(doc);
+    } catch (e) {
+      // Don't leave an orphaned object behind.
+      try {
+        const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
+        const { getS3Client, bucketName } = await import("@/lib/minio");
+        await getS3Client().send(new DeleteObjectCommand({ Bucket: bucketName(), Key: objectKey }));
+      } catch (cleanupErr) {
+        console.error("[items] orphan object cleanup failed:", cleanupErr);
+      }
+      return apiError(e);
+    }
+
     return json({ item: itemJSON(item) }, 201);
   } catch (e) {
     return apiError(e);
