@@ -15,6 +15,7 @@ import { BoardItem } from "./BoardItem";
 import { GroupBox } from "./GroupBox";
 import { ConnectionLayer, type ConnectionPreview } from "./ConnectionLayer";
 import { Toolbar, type ProjectInfo } from "./Toolbar";
+import { ActionBar } from "./ActionBar";
 
 type PresenceUser = {
   userId: string;
@@ -871,8 +872,8 @@ export function Board({
 
       {items.length === 0 && !uploading && !importingLink && (
         <div className="empty-hint">
-          Drag & drop images or links onto this canvas — or use the toolbar to
-          upload or paste a link.
+          Drag & drop images or links onto this canvas — or use the actions on the
+          left to upload or add a link.
         </div>
       )}
       {dropActive && <div className="drop-overlay">Drop to add images or links</div>}
@@ -880,22 +881,25 @@ export function Board({
         <div className="upload-toast">{importingLink ? "Importing link…" : "Uploading…"}</div>
       )}
 
+      <ActionBar
+        uploading={uploading}
+        importingLink={importingLink}
+        onUploadClick={() => fileInputRef.current?.click()}
+        onAddGroup={() => void addGroup()}
+        onAddLink={(url) => {
+          const center = centerWorld();
+          return importFromUrl(url, center.x, center.y);
+        }}
+      />
+
       <div className="board-toolbar">
         <Toolbar
           project={project}
           zoomPercent={v.scale * 100}
           activeUsers={users}
-          uploading={uploading}
-          importingLink={importingLink}
           onZoomIn={zoomIn}
           onZoomOut={zoomOut}
           onFit={fit}
-          onUploadClick={() => fileInputRef.current?.click()}
-          onAddGroup={() => void addGroup()}
-          onAddLink={(url) => {
-            const center = centerWorld();
-            return importFromUrl(url, center.x, center.y);
-          }}
         />
       </div>
 

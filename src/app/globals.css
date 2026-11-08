@@ -734,16 +734,7 @@ body {
   cursor: pointer;
 }
 
-.toolbar .icon-button.framed {
-  border: 1px solid #2c2c36;
-}
-
 .toolbar .icon-button:hover:not(:disabled) {
-  background: rgb(255 255 255 / 0.07);
-}
-
-.toolbar .icon-button.framed:hover:not(:disabled) {
-  border-color: #5b7cfa;
   background: rgb(255 255 255 / 0.07);
 }
 
@@ -773,13 +764,6 @@ body {
 .primary-button:disabled {
   opacity: 0.6;
   cursor: default;
-}
-
-.toolbar .primary-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  line-height: 1;
 }
 
 .zoom-pill {
@@ -813,7 +797,6 @@ body {
   color: #a0a0ae;
 }
 
-.link-form-wrap,
 .share-form-wrap {
   position: relative;
   display: flex;
@@ -868,26 +851,6 @@ body {
   gap: 6px;
 }
 
-.link-form {
-  display: flex;
-  gap: 6px;
-}
-
-.link-form input {
-  width: 240px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  border: 1px solid #2c2c36;
-  background: #101014;
-  color: #e8e8ee;
-  font-size: 13px;
-  outline: none;
-}
-
-.link-form input:focus {
-  border-color: #5b7cfa;
-}
-
 .share-form input {
   width: 180px;
   padding: 7px 10px;
@@ -901,4 +864,168 @@ body {
 
 .share-form input:focus {
   border-color: #5b7cfa;
+}
+
+/* ---------- floating action bar ---------- */
+
+.action-bar {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px;
+  border: 1px solid #2c2c36;
+  border-radius: 12px;
+  background: rgb(16 16 20 / 0.88);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 26px rgb(0 0 0 / 0.35);
+  z-index: 65;
+}
+
+.action-bar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: #e8e8ee;
+  cursor: pointer;
+}
+
+.action-bar-button:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.07);
+  border-color: #2c2c36;
+}
+
+.action-bar-button:focus-visible {
+  outline: 2px solid #5b7cfa;
+  outline-offset: 2px;
+}
+
+.action-bar-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.action-bar .spin,
+.link-dialog .spin {
+  animation: toolbar-spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action-bar .spin,
+  .link-dialog .spin {
+    animation: none;
+  }
+}
+
+/* ---------- link dialog ---------- */
+
+.link-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgb(6 6 9 / 0.6);
+  backdrop-filter: blur(3px);
+  z-index: 200;
+}
+
+.link-dialog {
+  width: min(440px, 100%);
+  padding: 18px;
+  border: 1px solid #2c2c36;
+  border-radius: 14px;
+  background: #17171d;
+  box-shadow: 0 18px 60px rgb(0 0 0 / 0.55);
+  cursor: default;
+}
+
+.link-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.link-dialog-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.link-dialog-close {
+  width: 30px;
+  height: 30px;
+}
+
+.link-dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.link-dialog-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #a0a0ae;
+}
+
+.link-dialog-form input {
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid #2c2c36;
+  background: #101014;
+  color: #e8e8ee;
+  font-size: 13px;
+  outline: none;
+}
+
+.link-dialog-form input:focus {
+  border-color: #5b7cfa;
+}
+
+.link-dialog-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #ff7b7b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.link-dialog-error svg {
+  flex-shrink: 0;
+}
+
+.link-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.link-dialog-actions .primary-button,
+.link-dialog-actions .ghost-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+
+.link-dialog-actions .ghost-button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
