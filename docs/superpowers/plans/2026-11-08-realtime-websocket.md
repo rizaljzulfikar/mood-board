@@ -538,7 +538,9 @@ REALTIME_PORT=4000
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/realtime/hub.ts src/realtime/server.ts tests/realtime-hub.test.ts package.json .env.local.example .env.local docker-compose.yml README.md
+# NOTE: .env.local is gitignored — append REALTIME_* to it for local runs,
+# but never stage it.
+git add src/realtime/hub.ts src/realtime/server.ts tests/realtime-hub.test.ts package.json .env.local.example docker-compose.yml README.md
 git commit -m "feat: standalone realtime hub and local infra"
 ```
 
