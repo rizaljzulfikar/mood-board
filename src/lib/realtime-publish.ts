@@ -26,6 +26,24 @@ export function buildPublishMessage(
 
 let socket: WebSocket | null = null;
 let connecting = false;
+// Frames produced while the socket is still connecting (or reconnecting) are
+// held until `open`. Without this the very first mutation after a cold start
+// is silently dropped.
+let pending: string[] = [];
+
+const MAX_PENDING = 100;
+
+function flushPending(ws: WebSocket): void {
+  const queued = pending;
+  pending = [];
+  for (const payload of queued) {
+    try {
+      ws.send(payload);
+    } catch {
+      // A broken publish socket must never affect the mutation that queued it.
+    }
+  }
+}
 
 function ensureSocket(): void {
   if (connecting) return;
@@ -41,6 +59,7 @@ function ensureSocket(): void {
   ws.on("open", () => {
     connecting = false;
     socket = ws;
+    flushPending(ws);
   });
   ws.on("close", () => {
     connecting = false;
@@ -54,9 +73,13 @@ function ensureSocket(): void {
 
 function defaultTransport(msg: PublishMessage): void {
   ensureSocket();
+  const payload = JSON.stringify(msg);
   if (socket?.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify(msg));
+    socket.send(payload);
+    return;
   }
+  pending.push(payload);
+  if (pending.length > MAX_PENDING) pending.shift();
 }
 
 let transport: (msg: PublishMessage) => void = defaultTransport;
