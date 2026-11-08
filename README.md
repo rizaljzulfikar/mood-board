@@ -25,12 +25,17 @@ npm run dev                 # http://localhost:3000
 
 ## Flow
 
-1. Register an account, log in.
-2. Create a project from the projects page.
+1. First run: open the app — you are redirected to `/setup` to create the
+   **superadmin** account (only possible while no users exist).
+2. Log in, create a project from the projects page.
 3. Drag & drop images onto the canvas (or use the upload button).
 4. Pan (drag empty space / middle mouse), zoom (wheel), move, resize
    (corner handle), delete (Del).
-5. Share: paste a teammate's email in the toolbar to invite them —
+5. Invite teammates (superadmin, on the projects page): enter a name + email —
+   MoodBoard creates the account with a generated **temporary password**.
+   Share it with them; they must set their own password at first login.
+   There is no registration page — accounts are invite-only.
+6. Share a project: paste a teammate's email in the toolbar to add them —
    their cursor and edits appear within ~2 seconds.
 
 ## Scripts
@@ -49,4 +54,11 @@ npm run dev                 # http://localhost:3000
   2-second sync; project deletion hard-deletes items and their MinIO objects.
 - Sessions are cookie-based (`mb_token`, httpOnly, SameSite=Lax). The app is
   designed for local/plain-HTTP self-hosting; `secure: false` is deliberate.
+- Accounts are invite-only. The superadmin is created through `/setup` while
+  no users exist; every other account is created via a superadmin invitation
+  with a temporary password that must be rotated at first login (data APIs
+  reject the user until they do).
+- Existing installs from before invitations: promote one account manually,
+  e.g.
+  `docker compose exec mongo mongosh moodboard --eval 'db.users.updateOne({ email: "you@example.com" }, { $set: { role: "superadmin" } })'`
 

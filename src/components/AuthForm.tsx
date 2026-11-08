@@ -1,28 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-export function AuthForm({ mode }: { mode: "login" | "register" }) {
+export function AuthForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-
-  const isRegister = mode === "register";
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setPending(true);
     setError(null);
     try {
-      const res = await fetch(`/api/auth/${mode}`, {
+      const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(isRegister ? { email, name, password } : { email, password }),
+        body: JSON.stringify({ email, password }),
       });
       const data = (await res.json()) as { error?: string; mustChangePassword?: boolean };
       if (!res.ok) {
@@ -40,7 +36,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
 
   return (
     <form className="auth-card" onSubmit={onSubmit}>
-      <h1>{isRegister ? "Create account" : "Log in"}</h1>
+      <h1>Log in</h1>
 
       <label>
         Email
@@ -54,49 +50,23 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         />
       </label>
 
-      {isRegister && (
-        <label>
-          Name
-          <input
-            required
-            autoComplete="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Your name"
-          />
-        </label>
-      )}
-
       <label>
         Password
         <input
           type="password"
           required
-          minLength={isRegister ? 8 : undefined}
-          autoComplete={isRegister ? "new-password" : "current-password"}
+          autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder={isRegister ? "At least 8 characters" : "••••••••"}
+          placeholder="••••••••"
         />
       </label>
 
       {error && <p className="auth-error">{error}</p>}
 
       <button type="submit" disabled={pending}>
-        {pending ? "…" : isRegister ? "Sign up" : "Log in"}
+        {pending ? "…" : "Log in"}
       </button>
-
-      <p className="auth-alt">
-        {isRegister ? (
-          <>
-            Already have an account? <Link href="/login">Log in</Link>
-          </>
-        ) : (
-          <>
-            No account yet? <Link href="/register">Create one</Link>
-          </>
-        )}
-      </p>
     </form>
   );
 }

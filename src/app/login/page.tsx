@@ -12,7 +12,7 @@ export default async function LoginPage() {
   if (await getCurrentUser()) redirect("/projects");
   return (
     <main className="auth-page">
-      <AuthForm mode="login" />
+      <AuthForm />
     </main>
   );
 }
