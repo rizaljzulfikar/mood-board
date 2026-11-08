@@ -13,11 +13,13 @@ import { edgeAnchors, expandRectToContain, pointInRect, rectContainsItemCenter, 
 import { movedPastDragThreshold } from "@/lib/drag";
 import { extractPastePayload } from "@/lib/clipboard";
 import {
+  ReplayQueue,
   commitHistory,
   initHistory,
   planServerOps,
   redoHistory,
   undoHistory,
+  waitForSettled,
   type HistoryStack,
   type ServerOp,
   type Snapshot,
@@ -148,6 +150,19 @@ export function Board({
   );
   // Bumped whenever the stacks change so button disabled-states re-render.
   const [, setHistTick] = useState(0);
+  // User-initiated content writes still in flight; a server replay must wait
+  // for them, or the original mutation can land after it and undo the undo.
+  const inflightRef = useRef<Set<Promise<unknown>>>(new Set());
+  const replayQueueRef = useRef<ReplayQueue>(new ReplayQueue());
+
+  /** Register a write so replays know to wait for it. Never rejects. */
+  const track = useCallback(<T,>(p: Promise<T>): Promise<T> => {
+    inflightRef.current.add(p);
+    void p.catch(() => {}).then(() => {
+      inflightRef.current.delete(p);
+    });
+    return p;
+  }, []);
 
   const snapshotBoard = useCallback(
     (): Snapshot => ({
@@ -164,15 +179,23 @@ export function Board({
     setHistTick((t) => t + 1);
   }, [snapshotBoard]);
 
-  const applyServerOps = useCallback((ops: ServerOp[]) => {
-    for (const op of ops) {
-      void fetch(`/api/${op.kind}s/${op.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(op.body),
-      }).catch(() => {});
-    }
-  }, []);
+  const applyServerOps = useCallback(
+    async (ops: ServerOp[]) => {
+      for (const op of ops) {
+        const p = fetch(`/api/${op.kind}s/${op.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(op.body),
+        }).catch(() => {});
+        inflightRef.current.add(p);
+        void p.then(() => {
+          inflightRef.current.delete(p);
+        });
+        await p;
+      }
+    },
+    []
+  );
 
   const runHistory = useCallback(
     (dir: "undo" | "redo") => {
@@ -185,7 +208,13 @@ export function Board({
       setItemsBoth(result.target.items);
       setGroupsBoth(result.target.groups);
       setConnectionsBoth(result.target.connections);
-      applyServerOps(planServerOps(result.target, current));
+      // Replay waits for in-flight user writes and any earlier replay, so a
+      // late DELETE can never land after its own undo and re-delete the
+      // restored entity.
+      replayQueueRef.current.enqueue(async () => {
+        await waitForSettled(inflightRef.current);
+        await applyServerOps(planServerOps(result.target, current));
+      });
       const sel = selectionRef.current;
       if (sel) {
         const pool =
@@ -251,17 +280,19 @@ export function Board({
 
   const patchItem = useCallback(
     async (id: string, patch: Partial<Pick<ItemState, "x" | "y" | "width" | "height" | "z">>) => {
-      const res = await fetch(`/api/items/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
+      const res = await track(
+        fetch(`/api/items/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        })
+      );
       if (res.status === 404) {
         // Deleted by a teammate while we were dragging it.
         setItemsBoth(itemsRef.current.filter((i) => i.id !== id));
       }
     },
-    [setItemsBoth]
+    [setItemsBoth, track]
   );
 
   const deleteItem = useCallback(
@@ -271,9 +302,9 @@ export function Board({
       if (selectionRef.current?.kind === "item" && selectionRef.current.id === id) {
         select(null);
       }
-      await fetch(`/api/items/${id}`, { method: "DELETE" });
+      await track(fetch(`/api/items/${id}`, { method: "DELETE" }));
     },
-    [commitSettled, select, setItemsBoth]
+    [commitSettled, select, setItemsBoth, track]
   );
 
   const patchGroup = useCallback(
@@ -281,11 +312,13 @@ export function Board({
       id: string,
       patch: Partial<Pick<GroupState, "x" | "y" | "width" | "height" | "z" | "label">>
     ) => {
-      const res = await fetch(`/api/groups/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
+      const res = await track(
+        fetch(`/api/groups/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        })
+      );
       if (res.status === 404) {
         // Deleted by a teammate while we were dragging it.
         setGroupsBoth(groupsRef.current.filter((g) => g.id !== id));
@@ -294,7 +327,7 @@ export function Board({
         );
       }
     },
-    [setConnectionsBoth, setGroupsBoth]
+    [setConnectionsBoth, setGroupsBoth, track]
   );
 
   const deleteGroup = useCallback(
@@ -305,9 +338,9 @@ export function Board({
       commitSettled();
       if (selectionRef.current?.id === id) select(null);
       if (labelEdit?.id === id) setLabelEdit(null);
-      await fetch(`/api/groups/${id}`, { method: "DELETE" });
+      await track(fetch(`/api/groups/${id}`, { method: "DELETE" }));
     },
-    [commitSettled, labelEdit?.id, select, setConnectionsBoth, setGroupsBoth]
+    [commitSettled, labelEdit?.id, select, setConnectionsBoth, setGroupsBoth, track]
   );
 
   const deleteConnection = useCallback(
@@ -317,9 +350,9 @@ export function Board({
       if (selectionRef.current?.kind === "connection" && selectionRef.current.id === id) {
         select(null);
       }
-      await fetch(`/api/connections/${id}`, { method: "DELETE" });
+      await track(fetch(`/api/connections/${id}`, { method: "DELETE" }));
     },
-    [commitSettled, select, setConnectionsBoth]
+    [commitSettled, select, setConnectionsBoth, track]
   );
 
   const toggleConnectionStyle = useCallback(
@@ -331,13 +364,15 @@ export function Board({
         connectionsRef.current.map((c) => (c.id === id ? { ...c, style } : c))
       );
       commitSettled();
-      await fetch(`/api/connections/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ style }),
-      });
+      await track(
+        fetch(`/api/connections/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ style }),
+        })
+      );
     },
-    [commitSettled, setConnectionsBoth]
+    [commitSettled, setConnectionsBoth, track]
   );
 
   const createConnection = useCallback(
@@ -354,7 +389,6 @@ export function Board({
     },
     [commitSettled, projectId, setConnectionsBoth]
   );
-
   const addGroup = useCallback(async () => {
     const center = centerWorld();
     const res = await fetch(`/api/projects/${projectId}/groups`, {
@@ -418,11 +452,13 @@ export function Board({
       if (label === group.label) return;
       setGroupsBoth(groupsRef.current.map((g) => (g.id === id ? { ...g, label } : g)));
       commitSettled();
-      void fetch(`/api/groups/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label }),
-      });
+      void track(
+        fetch(`/api/groups/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ label }),
+        })
+      );
       return;
     }
 
@@ -431,12 +467,14 @@ export function Board({
     if (label === item.label) return;
     setItemsBoth(itemsRef.current.map((i) => (i.id === id ? { ...i, label } : i)));
     commitSettled();
-    void fetch(`/api/items/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ label }),
-    });
-  }, [commitSettled, labelEdit, setGroupsBoth, setItemsBoth]);
+    void track(
+      fetch(`/api/items/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label }),
+      })
+    );
+  }, [commitSettled, labelEdit, setGroupsBoth, setItemsBoth, track]);
 
   const startItemLabelEdit = useCallback((item: ItemState) => {
     setLabelEdit({ id: item.id, draft: item.label, target: "item" });
@@ -760,6 +798,10 @@ export function Board({
             const group = groupsRef.current.find((g) => g.id === pressed.id);
             if (group) void patchGroup(group.id, { z: group.z });
           }
+          // Click-to-front is a z-order edit, so it is undoable too. The
+          // dedupe in commitHistory makes this a no-op for clicks that
+          // changed nothing (top item, resize handle, background pan).
+          commitSettled();
         }
         return;
       }

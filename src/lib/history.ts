@@ -125,6 +125,43 @@ export function redoHistory(
   };
 }
 
+/**
+ * Serializes undo/redo server replays: each enqueued task runs only after the
+ * previous one settled, so two rapid undos replay in gesture order. A failed
+ * task never breaks the chain.
+ */
+export class ReplayQueue {
+  private chain: Promise<void> = Promise.resolve();
+
+  enqueue(task: () => Promise<void>): void {
+    this.chain = this.chain.catch(() => {}).then(task);
+  }
+
+  /** Resolves once every enqueued task so far has settled. */
+  whenSettled(): Promise<void> {
+    return this.chain.then(
+      () => {},
+      () => {}
+    );
+  }
+}
+
+/**
+ * Resolves once every promise currently in the set has settled — including
+ * ones added while waiting (an earlier write may register more work, e.g. a
+ * cascade of PATCHes). Terminates on its own: promises are tracked as seen,
+ * so callers never need to prune the set for the drain to finish.
+ */
+export async function waitForSettled(promises: Set<Promise<unknown>>): Promise<void> {
+  const seen = new Set<Promise<unknown>>();
+  for (;;) {
+    const fresh = [...promises].filter((p) => !seen.has(p));
+    if (fresh.length === 0) return;
+    for (const p of fresh) seen.add(p);
+    await Promise.allSettled(fresh);
+  }
+}
+
 /** Fields compared per kind; `updatedAt` is excluded everywhere. */
 const ITEM_FIELDS = ["x", "y", "width", "height", "z", "rotation", "label"] as const;
 const GROUP_FIELDS = ["x", "y", "width", "height", "z", "label"] as const;

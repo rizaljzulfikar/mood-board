@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   MAX_HISTORY,
+  ReplayQueue,
   commitHistory,
   initHistory,
   normalizeSnapshot,
@@ -8,6 +9,7 @@ import {
   redoHistory,
   snapshotsEqual,
   undoHistory,
+  waitForSettled,
   type Snapshot,
 } from "@/lib/history";
 import type { ConnectionState, GroupState, ItemState } from "@/lib/merge";
@@ -192,6 +194,71 @@ describe("undoHistory / redoHistory", () => {
       current = back.target;
     }
     expect(h.future).toHaveLength(MAX_HISTORY);
+  });
+});
+
+describe("ReplayQueue", () => {
+  it("runs enqueued tasks strictly in enqueue order, regardless of resolve speed", async () => {
+    const queue = new ReplayQueue();
+    const order: string[] = [];
+    queue.enqueue(
+      () =>
+        new Promise<void>((resolve) =>
+          setTimeout(() => {
+            order.push("slow-first");
+            resolve();
+          }, 15)
+        )
+    );
+    queue.enqueue(async () => {
+      order.push("fast-second");
+    });
+    await queue.whenSettled();
+    expect(order).toEqual(["slow-first", "fast-second"]);
+  });
+
+  it("keeps the chain alive when a task rejects", async () => {
+    const queue = new ReplayQueue();
+    const order: string[] = [];
+    queue.enqueue(async () => {
+      throw new Error("replay failed");
+    });
+    queue.enqueue(async () => {
+      order.push("still-runs");
+    });
+    await queue.whenSettled();
+    expect(order).toEqual(["still-runs"]);
+  });
+});
+
+describe("waitForSettled", () => {
+  it("drains a set that keeps growing while it waits", async () => {
+    const set = new Set<Promise<unknown>>();
+    let resolveFirst!: () => void;
+    set.add(new Promise<void>((resolve) => { resolveFirst = resolve; }));
+
+    let secondDone = false;
+    const drained = waitForSettled(set);
+    // Registered while the first promise is still pending: the drain must
+    // not finish before this one settles too.
+    setTimeout(() => {
+      set.add(
+        new Promise<void>((resolve) =>
+          setTimeout(() => {
+            secondDone = true;
+            resolve();
+          }, 10)
+        )
+      );
+      resolveFirst();
+    }, 5);
+
+    await drained;
+    expect(secondDone).toBe(true);
+  });
+
+  it("resolves immediately for an empty set", async () => {
+    await waitForSettled(new Set());
   });
 });
 

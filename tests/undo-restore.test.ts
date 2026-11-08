@@ -214,6 +214,8 @@ describe("PATCH /api/groups/:id deleted flag", () => {
     expect(restored?.deletedAt).toBeNull();
     expect(restored?.x).toBe(7);
     expect(restored?.label).toBe("g");
+    // The restore must bump updatedAt so other clients' next sync sees it.
+    expect(restored!.updatedAt > (group.deletedAt as Date)).toBe(true);
   });
 
   it("re-deletes a live group and rejects re-deleting a deleted one", async () => {
@@ -270,6 +272,18 @@ describe("PATCH /api/connections/:id deleted flag", () => {
     const restored = await Connection.findById(connection._id);
     expect(restored?.deletedAt).toBeNull();
     expect(restored?.style).toBe("arrow");
+    // The restore must bump updatedAt so other clients' next sync sees it.
+    expect(restored!.updatedAt > (connection.deletedAt as Date)).toBe(true);
+  });
+
+  it("keeps 404 for a plain patch on a soft-deleted connection", async () => {
+    const connection = await makeConnection();
+    await softDelete(connection);
+    const res = await patchConnectionRoute(
+      patchRequest(`http://localhost/api/connections/${connection._id}`, { style: "line" }),
+      { params: Promise.resolve({ id: String(connection._id) }) }
+    );
+    expect(res.status).toBe(404);
   });
 
   it("re-deletes a live connection and rejects re-deleting a deleted one", async () => {
