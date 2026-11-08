@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/session-cookie";
 
-const PROTECTED = /^\/(projects(\/|$)|change-password$)/;
+const PROTECTED = /^\/(projects(\/|$)|change-password$|users$)/;
 const AUTH_PAGES = /^\/(login|setup)$/;
 
 export function middleware(req: NextRequest) {
@@ -18,5 +18,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/projects/:path*", "/login", "/setup", "/change-password"],
+  matcher: ["/projects/:path*", "/login", "/setup", "/change-password", "/users"],
 };

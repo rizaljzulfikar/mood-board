@@ -36,6 +36,15 @@ export async function requireUser(): Promise<SessionUser> {
   return user;
 }
 
+/** Guard for superadmin-only APIs (user management, invitations). */
+export async function requireSuperadmin(): Promise<SessionUser> {
+  const user = await requireUser();
+  if (user.role !== "superadmin") {
+    throw new ApiError(403, "Only the superadmin can manage users");
+  }
+  return user;
+}
+
 export async function requireMember(
   projectId: string
 ): Promise<{ user: SessionUser; project: ProjectDoc }> {

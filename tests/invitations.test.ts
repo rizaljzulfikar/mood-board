@@ -65,12 +65,12 @@ describe("POST /api/invitations", () => {
     expect(await verifyPassword(data.temporaryPassword, created!.passwordHash)).toBe(true);
   });
 
-  it("returns 403 Only the superadmin can invite users for a regular user", async () => {
+  it("returns 403 Only the superadmin can manage users for a regular user", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue(MEMBER);
     const res = await post({ name: "Teammate", email: "new@test.local" });
     expect(res.status).toBe(403);
     expect((await res.json() as { error: string }).error).toBe(
-      "Only the superadmin can invite users"
+      "Only the superadmin can manage users"
     );
   });
 

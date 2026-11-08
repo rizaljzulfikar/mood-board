@@ -36,11 +36,14 @@ npm run dev                 # http://localhost:3000
    group shows a → handle on its right edge: drag it onto another group to
    connect them (arrow). Click a connection to select it, Del to remove it,
    double-click to toggle arrow ↔ plain line.
-5. Invite teammates (superadmin, on the projects page): enter a name + email —
-   MoodBoard creates the account with a generated **temporary password**.
-   Share it with them; they must set their own password at first login.
-   There is no registration page — accounts are invite-only.
-6. Share a project: paste a teammate's email in the toolbar to add them —
+6. Manage accounts (superadmin, on the `/users` page): see all users, invite
+   teammates by name + email, **reset a password** (generates a new temporary
+   password to share with them), or **delete** a user — projects they owned
+   transfer to you, and they are removed from every project. MoodBoard creates
+   accounts with a generated **temporary password**; share it with them; they
+   must set their own password at first login. There is no registration page —
+   accounts are invite-only.
+7. Share a project: paste a teammate's email in the toolbar to add them —
    their cursor and edits appear within ~2 seconds.
 
 ## Scripts
@@ -60,9 +63,11 @@ npm run dev                 # http://localhost:3000
 - Sessions are cookie-based (`mb_token`, httpOnly, SameSite=Lax). The app is
   designed for local/plain-HTTP self-hosting; `secure: false` is deliberate.
 - Accounts are invite-only. The superadmin is created through `/setup` while
-  no users exist; every other account is created via a superadmin invitation
-  with a temporary password that must be rotated at first login (data APIs
-  reject the user until they do).
+  no users exist; every other account is created via the superadmin
+  user-management page (`/users`) with a temporary password that must be
+  rotated at first login (data APIs reject the user until they do). The same
+  page resets forgotten passwords and deletes accounts; the superadmin
+  account itself can be neither deleted nor have its password reset there.
 - Existing installs from before invitations: promote one account manually,
   e.g.
   `docker compose exec mongo mongosh moodboard --eval 'db.users.updateOne({ email: "you@example.com" }, { $set: { role: "superadmin" } })'`

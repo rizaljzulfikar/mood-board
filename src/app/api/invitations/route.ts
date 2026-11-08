@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/db";
 import { User } from "@/lib/models/User";
-import { apiError, json, requireUser } from "@/lib/api";
+import { apiError, json, requireSuperadmin } from "@/lib/api";
 import { generateTempPassword, hashPassword } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -10,10 +10,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** Superadmin-only: create a user account with a temporary password. */
 export async function POST(req: Request) {
   try {
-    const actor = await requireUser();
-    if (actor.role !== "superadmin") {
-      return json({ error: "Only the superadmin can invite users" }, 403);
-    }
+    await requireSuperadmin();
 
     const body = (await req.json()) as { email?: string; name?: string };
     const email = (body.email ?? "").trim().toLowerCase();
