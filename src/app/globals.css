@@ -692,7 +692,6 @@ body {
 }
 
 .toolbar-left,
-.toolbar-center,
 .toolbar-right {
   display: flex;
   align-items: center;
@@ -717,12 +716,14 @@ body {
 }
 
 .toolbar .ghost-button:disabled,
-.toolbar .icon-button:disabled {
+.toolbar .icon-button:disabled,
+.zoom-controls .icon-button:disabled {
   opacity: 0.5;
   cursor: default;
 }
 
-.toolbar .icon-button {
+.toolbar .icon-button,
+.zoom-controls .icon-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -734,7 +735,8 @@ body {
   cursor: pointer;
 }
 
-.toolbar .icon-button:hover:not(:disabled) {
+.toolbar .icon-button:hover:not(:disabled),
+.zoom-controls .icon-button:hover:not(:disabled) {
   background: rgb(255 255 255 / 0.07);
 }
 
@@ -924,6 +926,18 @@ body {
   .link-dialog .spin {
     animation: none;
   }
+}
+
+/* ---------- floating zoom controls ---------- */
+
+.zoom-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  background: rgb(16 16 20 / 0.88);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 26px rgb(0 0 0 / 0.35);
+  z-index: 65;
 }
 
 /* ---------- link dialog ---------- */

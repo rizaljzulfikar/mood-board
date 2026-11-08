@@ -6,9 +6,6 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   CircleNotch,
-  FrameCorners,
-  Minus,
-  Plus,
   UserPlus,
   Users,
   WarningCircle,
@@ -29,18 +26,10 @@ const ICON = { size: 15, weight: "bold" as const };
 
 export function Toolbar({
   project,
-  zoomPercent,
   activeUsers,
-  onZoomIn,
-  onZoomOut,
-  onFit,
 }: {
   project: ProjectInfo;
-  zoomPercent: number;
   activeUsers: Array<{ userId: string; name: string; color: string }>;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onFit: () => void;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -75,36 +64,6 @@ export function Toolbar({
           Projects
         </Link>
         <span className="toolbar-title">{project.name}</span>
-      </div>
-
-      <div className="toolbar-center">
-        <div className="zoom-group">
-          <button
-            className="icon-button"
-            onClick={onZoomOut}
-            title="Zoom out"
-            aria-label="Zoom out"
-          >
-            <Minus {...ICON} />
-          </button>
-          <span className="zoom-pill">{Math.round(zoomPercent)}%</span>
-          <button
-            className="icon-button"
-            onClick={onZoomIn}
-            title="Zoom in"
-            aria-label="Zoom in"
-          >
-            <Plus {...ICON} />
-          </button>
-          <button
-            className="icon-button"
-            onClick={onFit}
-            title="Zoom to fit"
-            aria-label="Zoom to fit"
-          >
-            <FrameCorners {...ICON} />
-          </button>
-        </div>
       </div>
 
       <div className="toolbar-right">

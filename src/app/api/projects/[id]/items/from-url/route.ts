@@ -1,6 +1,7 @@
 import { imageSize } from "image-size";
 import { apiError, json, requireMember } from "@/lib/api";
 import { createItemWithObject, extFromMime, itemJSON, MAX_UPLOAD_BYTES, ObjectStoreError } from "@/lib/items";
+import { apifyToken, fetchInstagramPost, isInstagramPostUrl } from "@/lib/instagram";
 import { extractOgMeta, fetchRemote, parsePublicHttpUrl } from "@/lib/url-fetch";
 
 export const runtime = "nodejs";
@@ -42,6 +43,39 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const pageUrl = parsePublicHttpUrl(rawUrl);
     if (!pageUrl) return json({ error: "That doesn't look like a valid http(s) link" }, 400);
 
+    // Instagram serves no og:image to anonymous clients, so OG scraping can't
+    // extract previews from post links. Resolve them via the Apify actor when
+    // configured; on any Apify failure fall through to the regular OG path.
+    const apify = apifyToken();
+    if (apify && isInstagramPostUrl(pageUrl)) {
+      const post = await fetchInstagramPost(pageUrl, apify);
+      if (post) {
+        let thumb: Awaited<ReturnType<typeof fetchRemote>>;
+        try {
+          thumb = await fetchRemote(post.imageUrl.toString(), MAX_UPLOAD_BYTES);
+        } catch (e) {
+          return json({ error: userMessage(e) }, 502);
+        }
+        if (!thumb.contentType.startsWith("image/")) {
+          return json({ error: "The page's preview image could not be loaded" }, 422);
+        }
+        return importImage({
+          projectId: String(project._id),
+          userId: user.id,
+          url: thumb.finalUrl,
+          buffer: thumb.buffer,
+          contentType: thumb.contentType,
+          x,
+          y,
+          kind: "link",
+          sourceUrl: post.postUrl,
+          title: post.caption?.slice(0, 300) || null,
+          siteName: post.author ? `@${post.author}` : "Instagram",
+          errorStatus: 422,
+        });
+      }
+    }
+
     let page: Awaited<ReturnType<typeof fetchRemote>>;
     try {
       page = await fetchRemote(pageUrl.toString(), MAX_UPLOAD_BYTES);
@@ -77,6 +111,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // Page link: extract Open Graph preview and store its image as the thumbnail.
     const meta = extractOgMeta(page.buffer.toString("utf8"), page.finalUrl);
     if (!meta.imageUrl) {
+      if (isInstagramPostUrl(pageUrl) && !apifyToken()) {
+        return json(
+          {
+            error:
+              "Instagram doesn't expose previews for this link — set APIFY_TOKEN to enable Instagram imports",
+          },
+          422
+        );
+      }
       return json({ error: "No preview image found on that page" }, 422);
     }
 

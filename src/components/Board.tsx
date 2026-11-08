@@ -10,6 +10,7 @@ import {
   type ItemState,
 } from "@/lib/merge";
 import { edgeAnchors, expandRectToContain, pointInRect, rectContainsItemCenter, topGroupContaining } from "@/lib/geometry";
+import { movedPastDragThreshold } from "@/lib/drag";
 import { extractPastePayload } from "@/lib/clipboard";
 import { fitViewport, toScreen, toWorld, zoomAt, type Viewport } from "@/lib/viewport";
 import { BoardItem } from "./BoardItem";
@@ -17,6 +18,7 @@ import { GroupBox } from "./GroupBox";
 import { ConnectionLayer, type ConnectionPreview } from "./ConnectionLayer";
 import { Toolbar, type ProjectInfo } from "./Toolbar";
 import { ActionBar } from "./ActionBar";
+import { ZoomControls } from "./ZoomControls";
 
 type PresenceUser = {
   userId: string;
@@ -45,6 +47,20 @@ type DragState =
   | { kind: "group-resize"; id: string }
   | { kind: "connect"; fromId: string; x: number; y: number }
   | null;
+
+/**
+ * A press that has not moved yet. It becomes a real drag once the pointer
+ * travels past the drag threshold; until then no pointer capture is taken, so
+ * clicks and double-clicks reach the element under the pointer.
+ */
+type PendingDrag = {
+  drag: NonNullable<DragState>;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  /** Side effects that only matter once the drag actually starts. */
+  activate: () => void;
+};
 
 export function Board({
   projectId,
@@ -110,6 +126,7 @@ export function Board({
   const [dropActive, setDropActive] = useState(false);
 
   const dragRef = useRef<DragState>(null);
+  const pendingRef = useRef<PendingDrag | null>(null);
   const lockedRef = useRef<Set<string>>(new Set());
   const sinceRef = useRef<string | null>(null);
   const cursorRef = useRef<{ x: number; y: number } | null>(null);
@@ -353,11 +370,32 @@ export function Board({
     return { x: clientX - (rect?.left ?? 0), y: clientY - (rect?.top ?? 0) };
   }, []);
 
+  /**
+   * Remember a press without capturing the pointer yet. Capture is taken in
+   * `onPointerMove` once the drag threshold is crossed, which keeps plain
+   * clicks and double-clicks targeting the element under the pointer.
+   */
+  const queueDrag = useCallback(
+    (
+      e: ReactPointerEvent,
+      drag: NonNullable<DragState>,
+      activate: () => void = () => {}
+    ) => {
+      pendingRef.current = {
+        drag,
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        activate,
+      };
+    },
+    []
+  );
+
   const startMove = useCallback(
     (e: ReactPointerEvent, item: ItemState) => {
       if (e.button === 1) return; // middle button pans
       e.stopPropagation();
-      containerRef.current?.setPointerCapture(e.pointerId);
 
       select({ kind: "item", id: item.id });
 
@@ -369,39 +407,43 @@ export function Board({
         setItemsBoth(itemsRef.current.map((i) => (i.id === item.id ? { ...i, z: nextZ } : i)));
       }
 
-      lockedRef.current.add(item.id);
-      dragRef.current = {
-        kind: "move",
-        id: item.id,
-        dx: world.x - item.x,
-        dy: world.y - item.y,
-      };
+      queueDrag(
+        e,
+        {
+          kind: "move",
+          id: item.id,
+          dx: world.x - item.x,
+          dy: world.y - item.y,
+        },
+        () => lockedRef.current.add(item.id)
+      );
     },
-    [screenToBoard, select, setItemsBoth]
+    [queueDrag, screenToBoard, select, setItemsBoth]
   );
 
   const startResize = useCallback(
     (e: ReactPointerEvent, item: ItemState) => {
-      containerRef.current?.setPointerCapture(e.pointerId);
       const board = screenToBoard(e.clientX, e.clientY);
       const world = toWorld(board.x, board.y, viewportRef.current);
-      lockedRef.current.add(item.id);
-      dragRef.current = {
-        kind: "resize",
-        id: item.id,
-        startX: world.x,
-        startY: world.y,
-        aspect: item.height / item.width,
-      };
+      queueDrag(
+        e,
+        {
+          kind: "resize",
+          id: item.id,
+          startX: world.x,
+          startY: world.y,
+          aspect: item.height / item.width,
+        },
+        () => lockedRef.current.add(item.id)
+      );
     },
-    [screenToBoard]
+    [queueDrag, screenToBoard]
   );
 
   const startGroupMove = useCallback(
     (e: ReactPointerEvent, group: GroupState) => {
       if (e.button === 1) return; // middle button pans
       e.stopPropagation();
-      containerRef.current?.setPointerCapture(e.pointerId);
 
       select({ kind: "group", id: group.id });
 
@@ -421,66 +463,103 @@ export function Board({
         .filter((i) => rectContainsItemCenter(group, i))
         .map((i) => i.id);
 
-      lockedRef.current.add(group.id);
-      for (const id of memberIds) lockedRef.current.add(id);
-
-      dragRef.current = {
-        kind: "group-move",
-        id: group.id,
-        dx: world.x - group.x,
-        dy: world.y - group.y,
-        memberIds,
-      };
+      queueDrag(
+        e,
+        {
+          kind: "group-move",
+          id: group.id,
+          dx: world.x - group.x,
+          dy: world.y - group.y,
+          memberIds,
+        },
+        () => {
+          lockedRef.current.add(group.id);
+          for (const id of memberIds) lockedRef.current.add(id);
+        }
+      );
     },
-    [screenToBoard, select, setGroupsBoth]
+    [queueDrag, screenToBoard, select, setGroupsBoth]
   );
 
   const startGroupResize = useCallback(
     (e: ReactPointerEvent, group: GroupState) => {
-      containerRef.current?.setPointerCapture(e.pointerId);
-      lockedRef.current.add(group.id);
-      dragRef.current = { kind: "group-resize", id: group.id };
+      queueDrag(e, { kind: "group-resize", id: group.id }, () =>
+        lockedRef.current.add(group.id)
+      );
     },
-    []
+    [queueDrag]
   );
 
   const startConnect = useCallback(
     (e: ReactPointerEvent, group: GroupState) => {
-      containerRef.current?.setPointerCapture(e.pointerId);
       const board = screenToBoard(e.clientX, e.clientY);
       const world = toWorld(board.x, board.y, viewportRef.current);
-      dragRef.current = { kind: "connect", fromId: group.id, x: world.x, y: world.y };
-      setConnectPoint(world);
+      queueDrag(e, { kind: "connect", fromId: group.id, x: world.x, y: world.y });
     },
-    [screenToBoard]
+    [queueDrag, screenToBoard]
   );
 
   const onPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       const el = e.target as HTMLElement;
       const onBackground = el === containerRef.current || el.dataset.background === "true";
-      if (e.button === 1 || (e.button === 0 && onBackground)) {
-        e.preventDefault();
-        if (e.button === 0) {
-          select(null);
-          commitLabelEdit(); // clicking away saves the label draft
-        }
-        containerRef.current?.setPointerCapture(e.pointerId);
-        dragRef.current = {
-          kind: "pan",
-          startX: e.clientX,
-          startY: e.clientY,
-          vx: viewportRef.current.x,
-          vy: viewportRef.current.y,
-        };
+      if (!(e.button === 1 || (e.button === 0 && onBackground))) return;
+      e.preventDefault();
+      if (e.button === 0) {
+        select(null);
+        commitLabelEdit(); // clicking away saves the label draft
       }
+      const pan: NonNullable<DragState> = {
+        kind: "pan",
+        startX: e.clientX,
+        startY: e.clientY,
+        vx: viewportRef.current.x,
+        vy: viewportRef.current.y,
+      };
+      if (e.button === 1) {
+        // Middle-button pan starts at once; it can never be a double-click.
+        containerRef.current?.setPointerCapture(e.pointerId);
+        dragRef.current = pan;
+        return;
+      }
+      queueDrag(e, pan);
     },
-    [commitLabelEdit, select]
+    [commitLabelEdit, queueDrag, select]
   );
 
   const onPointerMove = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       const board = screenToBoard(e.clientX, e.clientY);
+
+      // A press becomes a drag only after the pointer travels far enough.
+      // Until then the pointer is not captured, so clicks and double-clicks
+      // keep their normal DOM target (inline label editing relies on it).
+      const pending = pendingRef.current;
+      if (pending && !dragRef.current) {
+        cursorRef.current = toWorld(board.x, board.y, viewportRef.current);
+        if (e.buttons === 0) {
+          // Released before it ever became a drag.
+          pendingRef.current = null;
+          return;
+        }
+        if (
+          !movedPastDragThreshold(
+            { x: pending.startX, y: pending.startY },
+            { x: e.clientX, y: e.clientY }
+          )
+        ) {
+          return;
+        }
+        pendingRef.current = null;
+        try {
+          containerRef.current?.setPointerCapture(pending.pointerId);
+        } catch {
+          // Pointer already released outside the window.
+        }
+        dragRef.current = pending.drag;
+        pending.activate();
+      }
+
       const drag = dragRef.current;
 
       if (!drag) {
@@ -582,10 +661,27 @@ export function Board({
 
   const finishDrag = useCallback(
     (e: ReactPointerEvent) => {
+      // A press that never crossed the threshold is just a click.
+      const pending = pendingRef.current;
+      pendingRef.current = null;
       const drag = dragRef.current;
       dragRef.current = null;
       setBucketTargetId(null);
-      if (!drag) return;
+
+      if (!drag) {
+        // Clicking still brings an item or group to the front, as before.
+        if (pending) {
+          const pressed = pending.drag;
+          if (pressed.kind === "move") {
+            const item = itemsRef.current.find((i) => i.id === pressed.id);
+            if (item) void patchItem(item.id, { z: item.z });
+          } else if (pressed.kind === "group-move") {
+            const group = groupsRef.current.find((g) => g.id === pressed.id);
+            if (group) void patchGroup(group.id, { z: group.z });
+          }
+        }
+        return;
+      }
 
       if (drag.kind === "move") {
         const item = itemsRef.current.find((i) => i.id === drag.id);
@@ -910,15 +1006,15 @@ export function Board({
         }}
       />
 
+      <ZoomControls
+        zoomPercent={v.scale * 100}
+        onZoomIn={zoomIn}
+        onZoomOut={zoomOut}
+        onFit={fit}
+      />
+
       <div className="board-toolbar">
-        <Toolbar
-          project={project}
-          zoomPercent={v.scale * 100}
-          activeUsers={users}
-          onZoomIn={zoomIn}
-          onZoomOut={zoomOut}
-          onFit={fit}
-        />
+        <Toolbar project={project} activeUsers={users} />
       </div>
 
       <input

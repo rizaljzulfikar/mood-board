@@ -183,4 +183,66 @@ describe("POST /api/projects/:id/items/from-url", () => {
     const res = await importUrl("https://example.net/blob.bin");
     expect(res.status).toBe(415);
   });
+
+  it("imports Instagram posts via Apify when APIFY_TOKEN is set", async () => {
+    vi.stubEnv("APIFY_TOKEN", "apify_test_token");
+    const apifyItem = {
+      url: "https://www.instagram.com/p/DfFb49L/",
+      shortCode: "DfFb49L",
+      type: "Image",
+      caption: "Ceramic mug photo",
+      ownerUsername: "natgeo",
+      displayUrl: "https://scontent.cdninstagram.test/v/t51/DfFb49L.jpg",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([apifyItem]), { status: 200 }))
+      .mockResolvedValueOnce(imageResponse(PNG_1X1, "image/jpeg"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await importUrl("https://www.instagram.com/p/DfFb49L/");
+    expect(res.status).toBe(201);
+
+    const { item } = (await res.json()) as { item: Record<string, unknown> };
+    expect(item.kind).toBe("link");
+    expect(item.title).toBe("Ceramic mug photo");
+    expect(item.siteName).toBe("@natgeo");
+    expect(item.sourceUrl).toBe("https://www.instagram.com/p/DfFb49L/");
+    expect(putObjectBuffer).toHaveBeenCalledWith(item.objectKey, PNG_1X1, "image/jpeg");
+
+    // Only the Apify run + the CDN image are fetched — never instagram.com itself.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("api.apify.com/v2/acts/apify~instagram-post-scraper");
+    expect(String(fetchMock.mock.calls[1][0])).toBe("https://scontent.cdninstagram.test/v/t51/DfFb49L.jpg");
+  });
+
+  it("suggests APIFY_TOKEN when an Instagram link has no preview and no token is set", async () => {
+    vi.stubEnv("APIFY_TOKEN", "");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => htmlResponse("<html><head><title>Instagram</title></head></html>"))
+    );
+
+    const res = await importUrl("https://www.instagram.com/p/DfFb49L/");
+    expect(res.status).toBe(422);
+    const data = (await res.json()) as { error?: string };
+    expect(data.error).toMatch(/APIFY_TOKEN/);
+    expect(await Item.countDocuments({ project: project._id })).toBe(0);
+  });
+
+  it("falls back to OG scraping without the token hint when Apify fails", async () => {
+    vi.stubEnv("APIFY_TOKEN", "apify_test_token");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+      .mockResolvedValueOnce(htmlResponse("<html><head><title>Instagram</title></head></html>"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await importUrl("https://www.instagram.com/p/DfFb49L/");
+    expect(res.status).toBe(422);
+    const data = (await res.json()) as { error?: string };
+    expect(data.error).toMatch(/no preview image/i);
+    expect(data.error).not.toMatch(/APIFY_TOKEN/);
+    expect(await Item.countDocuments({ project: project._id })).toBe(0);
+  });
 });
