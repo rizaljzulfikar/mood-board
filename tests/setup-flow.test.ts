@@ -58,6 +58,18 @@ describe("POST /api/auth/setup", () => {
     expect((await res.json() as { error: string }).error).toBe("Setup already completed");
   });
 
+  it("allows exactly one superadmin under concurrent first-run requests", async () => {
+    const requests = Array.from({ length: 8 }, (_, i) =>
+      post({ name: `Admin ${i}`, email: `race-${i}@test.local`, password: "supersecret1" })
+    );
+    const responses = await Promise.all(requests);
+    const created = responses.filter((r) => r.status === 201);
+    const conflicted = responses.filter((r) => r.status === 409);
+    expect(created).toHaveLength(1);
+    expect(conflicted).toHaveLength(7);
+    expect(await User.countDocuments({ role: "superadmin" })).toBe(1);
+  });
+
   it("rejects an invalid email with 400", async () => {
     const res = await post({ name: "Admin", email: "not-an-email", password: "supersecret1" });
     expect(res.status).toBe(400);

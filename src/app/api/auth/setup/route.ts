@@ -21,19 +21,29 @@ export async function POST(req: Request) {
     if (password.length < 8) return json({ error: "Password must be at least 8 characters" }, 400);
 
     await connectDB();
+    // Ensure the one-superadmin unique index exists before racing requests create.
+    await User.init();
     if (await User.exists({})) return json({ error: "Setup already completed" }, 409);
 
-    const user = await User.create({
-      email,
-      name,
-      passwordHash: await hashPassword(password),
-      role: "superadmin",
-    });
-    await startSession(String(user._id));
-    return json(
-      { user: { id: String(user._id), email: user.email, name: user.name, role: user.role } },
-      201
-    );
+    try {
+      const user = await User.create({
+        email,
+        name,
+        passwordHash: await hashPassword(password),
+        role: "superadmin",
+      });
+      await startSession(String(user._id));
+      return json(
+        { user: { id: String(user._id), email: user.email, name: user.name, role: user.role } },
+        201
+      );
+    } catch (e) {
+      // Lost a race against a concurrent setup request.
+      if (e instanceof Error && e.name === "MongoServerError" && "code" in e && e.code === 11000) {
+        return json({ error: "Setup already completed" }, 409);
+      }
+      throw e;
+    }
   } catch (e) {
     return apiError(e);
   }
