@@ -697,7 +697,53 @@ body {
 
 .toolbar .ghost-button {
   text-decoration: none;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+
+.toolbar .ghost-button:disabled,
+.toolbar .icon-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.toolbar .icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #e8e8ee;
+  cursor: pointer;
+}
+
+.toolbar .icon-button.framed {
+  border: 1px solid #2c2c36;
+}
+
+.toolbar .icon-button:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.07);
+}
+
+.toolbar .icon-button.framed:hover:not(:disabled) {
+  border-color: #5b7cfa;
+  background: rgb(255 255 255 / 0.07);
+}
+
+.zoom-group {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #2c2c36;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.zoom-group > * + * {
+  border-left: 1px solid #2c2c36;
 }
 
 .primary-button {
@@ -716,10 +762,19 @@ body {
   cursor: default;
 }
 
+.toolbar .primary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+
 .zoom-pill {
   min-width: 46px;
+  padding: 0 6px;
   text-align: center;
   font-size: 13px;
+  line-height: 1;
   color: #a0a0ae;
 }
 
@@ -738,8 +793,61 @@ body {
 }
 
 .member-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 13px;
   color: #a0a0ae;
+}
+
+.link-form-wrap,
+.share-form-wrap {
+  position: relative;
+  display: flex;
+}
+
+.toolbar-error {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgb(255 123 123 / 0.35);
+  background: rgb(46 22 26 / 0.95);
+  backdrop-filter: blur(8px);
+  color: #ff7b7b;
+  font-size: 12px;
+  line-height: 1.35;
+  max-width: 320px;
+  z-index: 80;
+}
+
+.toolbar-error.align-right {
+  left: auto;
+  right: 0;
+}
+
+.toolbar-error svg {
+  flex-shrink: 0;
+}
+
+@keyframes toolbar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.toolbar .spin {
+  animation: toolbar-spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toolbar .spin {
+    animation: none;
+  }
 }
 
 .share-form {
@@ -780,10 +888,4 @@ body {
 
 .share-form input:focus {
   border-color: #5b7cfa;
-}
-
-.share-error {
-  color: #ff7b7b;
-  font-size: 12px;
-  max-width: 160px;
 }
