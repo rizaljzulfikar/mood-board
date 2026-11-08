@@ -9,7 +9,11 @@ export function LogoutButton() {
     <button
       className="ghost-button"
       onClick={async () => {
-        await fetch("/api/auth/logout", { method: "POST" });
+        try {
+          await fetch("/api/auth/logout", { method: "POST" });
+        } catch {
+          // Server unreachable — still navigate; /login will surface the error.
+        }
         router.push("/login");
         router.refresh();
       }}
