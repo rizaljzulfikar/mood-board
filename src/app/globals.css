@@ -464,6 +464,19 @@ body {
   background: rgb(91 124 250 / 0.07);
 }
 
+/* A dragged image is hovering over the box — it would be swallowed on drop. */
+.group-box.bucket-target {
+  border-color: #5b7cfa;
+  border-style: dashed;
+  background: rgb(91 124 250 / 0.16);
+}
+
+.group-box.bucket-target .group-label {
+  background: #5b7cfa;
+  color: #101014;
+  border-bottom-color: #5b7cfa;
+}
+
 .group-label {
   position: absolute;
   top: -1.5px;

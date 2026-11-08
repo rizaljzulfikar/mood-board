@@ -7,6 +7,7 @@ import type { GroupState } from "@/lib/merge";
 export function GroupBox({
   group,
   selected,
+  bucketTarget,
   editing,
   draftLabel,
   onGroupPointerDown,
@@ -19,6 +20,7 @@ export function GroupBox({
 }: {
   group: GroupState;
   selected: boolean;
+  bucketTarget: boolean;
   editing: boolean;
   draftLabel: string;
   onGroupPointerDown: (e: ReactPointerEvent, group: GroupState) => void;
@@ -37,7 +39,7 @@ export function GroupBox({
 
   return (
     <div
-      className={`group-box${selected ? " selected" : ""}`}
+      className={`group-box${selected ? " selected" : ""}${bucketTarget ? " bucket-target" : ""}`}
       style={{ left: group.x, top: group.y, width: group.width, height: group.height }}
       onPointerDown={(e) => {
         // Never start a drag from the label input.

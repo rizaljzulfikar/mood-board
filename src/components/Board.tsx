@@ -29,7 +29,7 @@ const MIN_DIM = 24;
 const MAX_DIM = 8000;
 const MIN_GROUP_DIM = 60;
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
-const GROUP_BUCKET_PADDING = 16;
+const GROUP_BUCKET_PADDING = 32;
 const NEW_GROUP_WIDTH = 360;
 const NEW_GROUP_HEIGHT = 240;
 
@@ -99,6 +99,8 @@ export function Board({
     target: "group" | "item";
   } | null>(null);
   const [connectPoint, setConnectPoint] = useState<{ x: number; y: number } | null>(null);
+  // Group currently "catching" a dragged image — highlighted as the bucket target.
+  const [bucketTargetId, setBucketTargetId] = useState<string | null>(null);
 
   const [users, setUsers] = useState<PresenceUser[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -497,11 +499,13 @@ export function Board({
       const world = toWorld(board.x, board.y, viewportRef.current);
 
       if (drag.kind === "move") {
+        const dragged = itemsRef.current.find((i) => i.id === drag.id);
+        if (!dragged) return;
+        const movedItem = { ...dragged, x: world.x - drag.dx, y: world.y - drag.dy };
         setItemsBoth(
-          itemsRef.current.map((i) =>
-            i.id === drag.id ? { ...i, x: world.x - drag.dx, y: world.y - drag.dy } : i
-          )
+          itemsRef.current.map((i) => (i.id === drag.id ? movedItem : i))
         );
+        setBucketTargetId(topGroupContaining(groupsRef.current, movedItem)?.id ?? null);
       } else if (drag.kind === "resize") {
         const item = itemsRef.current.find((i) => i.id === drag.id);
         if (!item) return;
@@ -578,6 +582,7 @@ export function Board({
     (e: ReactPointerEvent) => {
       const drag = dragRef.current;
       dragRef.current = null;
+      setBucketTargetId(null);
       if (!drag) return;
 
       if (drag.kind === "move") {
@@ -803,6 +808,7 @@ export function Board({
             key={group.id}
             group={group}
             selected={selection?.kind === "group" && selection.id === group.id}
+            bucketTarget={bucketTargetId === group.id}
             editing={labelEdit?.id === group.id}
             draftLabel={labelEdit?.draft ?? ""}
             onGroupPointerDown={startGroupMove}
