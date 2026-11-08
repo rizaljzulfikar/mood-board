@@ -1105,9 +1105,13 @@ export function Board({
 
       <ZoomControls
         zoomPercent={v.scale * 100}
+        canUndo={canUndo}
+        canRedo={canRedo}
         onZoomIn={zoomIn}
         onZoomOut={zoomOut}
         onFit={fit}
+        onUndo={() => runHistory("undo")}
+        onRedo={() => runHistory("redo")}
       />
 
       <div className="board-toolbar">
