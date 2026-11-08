@@ -61,8 +61,9 @@ describe("realtime hub", () => {
     await verificationStarted;
     const closedEvent = new Promise<void>((resolve) => closed.once("close", () => resolve()));
     closed.close();
-    releaseVerification({ projectId: "p1", userId: "closed-user", name: "Closed" });
     await closedEvent;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    releaseVerification({ projectId: "p1", userId: "closed-user", name: "Closed" });
 
     const good = new WebSocket(
       `ws://localhost:${port}?ticket=live-ticket`
