@@ -937,6 +937,9 @@ export function Board({
     let fallbackInterval: ReturnType<typeof setInterval> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let reconnectDelay = 500;
+    let syncInFlight = false;
+    let syncQueued = false;
+    let syncGeneration = 0;
 
     const applySync = (data: {
       items: ItemState[];
@@ -967,6 +970,13 @@ export function Board({
     };
 
     const poll = async () => {
+      if (stopped) return;
+      if (syncInFlight) {
+        syncQueued = true;
+        return;
+      }
+      syncInFlight = true;
+      const requestGeneration = syncGeneration;
       try {
         const res = await fetch(`/api/projects/${projectId}/sync`, {
           method: "POST",
@@ -974,13 +984,22 @@ export function Board({
           body: JSON.stringify({ since: sinceRef.current, cursor: cursorRef.current }),
         });
         if (!res.ok || stopped) return;
-        applySync((await res.json()) as Parameters<typeof applySync>[0]);
+        const data = (await res.json()) as Parameters<typeof applySync>[0];
+        if (requestGeneration === syncGeneration) applySync(data);
+        else syncQueued = true;
       } catch {
         /* transient network error — next tick retries */
+      } finally {
+        syncInFlight = false;
+        if (syncQueued && !stopped) {
+          syncQueued = false;
+          void poll();
+        }
       }
     };
 
     const startFallback = () => {
+      if (stopped) return;
       if (fallbackInterval === null) fallbackInterval = setInterval(poll, SYNC_INTERVAL_MS);
     };
     const connect = async () => {
@@ -1018,6 +1037,7 @@ export function Board({
             message,
             [...lockedRef.current]
           );
+          syncGeneration += 1;
           setItemsBoth(next.items);
           setGroupsBoth(next.groups);
           setConnectionsBoth(next.connections);
@@ -1036,6 +1056,7 @@ export function Board({
           }
         };
       } catch {
+        if (stopped) return;
         startFallback();
         if (!stopped && reconnectTimer === null) {
           reconnectTimer = setTimeout(() => {
