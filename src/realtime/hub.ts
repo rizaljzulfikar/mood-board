@@ -1,11 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import WebSocket, { WebSocketServer } from "ws";
-import { verifyRoomTicket } from "../lib/realtime-ticket";
+import { verifyRoomTicket, type RoomTicketClaims } from "../lib/realtime-ticket";
 import type { PublishMessage, ServerMessage } from "../lib/realtime-protocol";
 import { RoomRegistry } from "./rooms";
 
-export async function startHub(options: { port: number; secret: string }): Promise<Server> {
+type HubOptions = {
+  port: number;
+  secret: string;
+  verifyTicket?: (ticket: string) => Promise<RoomTicketClaims | null>;
+};
+
+export async function startHub(options: HubOptions): Promise<Server> {
   const registry = new RoomRegistry();
   const http = createServer((req, res) => {
     if (req.url === "/health") {
@@ -17,9 +23,10 @@ export async function startHub(options: { port: number; secret: string }): Promi
     res.end();
   });
   const wss = new WebSocketServer({ server: http });
+  const verifyTicket = options.verifyTicket ?? ((ticket: string) => verifyRoomTicket(ticket, options.secret));
 
   wss.on("connection", (socket, req) => {
-    void handleConnection(socket, req, options.secret, registry);
+    void handleConnection(socket, req, options.secret, registry, verifyTicket);
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -42,7 +49,8 @@ async function handleConnection(
   socket: WebSocket,
   req: IncomingMessage,
   secret: string,
-  registry: RoomRegistry
+  registry: RoomRegistry,
+  verifyTicket: (ticket: string) => Promise<RoomTicketClaims | null>
 ): Promise<void> {
   try {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -65,7 +73,7 @@ async function handleConnection(
       socket.close(4001);
       return;
     }
-    const claims = await verifyRoomTicket(ticket, secret);
+    const claims = await verifyTicket(ticket);
     if (!claims || socket.readyState !== WebSocket.OPEN) {
       socket.close(4001);
       return;

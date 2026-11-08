@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import type { Server } from "node:http";
 import WebSocket from "ws";
 import { startHub } from "../src/realtime/hub";
-import { signRoomTicket } from "@/lib/realtime-ticket";
+import { signRoomTicket, type RoomTicketClaims } from "@/lib/realtime-ticket";
 
 const SECRET = "test-realtime-secret";
 let server: Server | null = null;
@@ -35,17 +35,37 @@ describe("realtime hub", () => {
   });
 
   it("does not retain a socket closed during ticket verification", async () => {
-    server = await startHub({ port: 0, secret: SECRET });
+    let releaseVerification!: (claims: RoomTicketClaims) => void;
+    let markVerificationStarted!: () => void;
+    const verificationStarted = new Promise<void>((resolve) => {
+      markVerificationStarted = resolve;
+    });
+    const verification = new Promise<RoomTicketClaims>((resolve) => {
+      releaseVerification = resolve;
+    });
+    server = await startHub({
+      port: 0,
+      secret: SECRET,
+      verifyTicket: async (ticket) => {
+        if (ticket === "blocked-ticket") {
+          markVerificationStarted();
+          return verification;
+        }
+        return { projectId: "p1", userId: "live-user", name: "Live" };
+      },
+    });
     const port = portOf(server);
-    const ticket = await signRoomTicket("p1", "closed-user", "Closed", 60_000);
-    const closed = new WebSocket(`ws://localhost:${port}?ticket=${ticket}`);
+    const closed = new WebSocket(`ws://localhost:${port}?ticket=blocked-ticket`);
     closed.on("error", () => undefined);
+    await new Promise<void>((resolve) => closed.once("open", () => resolve()));
+    await verificationStarted;
     const closedEvent = new Promise<void>((resolve) => closed.once("close", () => resolve()));
     closed.close();
+    releaseVerification({ projectId: "p1", userId: "closed-user", name: "Closed" });
     await closedEvent;
 
     const good = new WebSocket(
-      `ws://localhost:${port}?ticket=${await signRoomTicket("p1", "live-user", "Live", 60_000)}`
+      `ws://localhost:${port}?ticket=live-ticket`
     );
     const msg = await next(good);
     expect(msg.users).toEqual(expect.arrayContaining([expect.objectContaining({ userId: "live-user" })]));
