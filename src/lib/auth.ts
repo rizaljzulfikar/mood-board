@@ -8,8 +8,15 @@ import {
   signSessionToken,
   verifySessionToken,
 } from "./session";
+import type { UserRole } from "./models/User";
 
-export type SessionUser = { id: string; email: string; name: string };
+export type SessionUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  mustChangePassword: boolean;
+};
 
 export async function startSession(userId: string): Promise<void> {
   const token = await signSessionToken(userId);
@@ -35,5 +42,11 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   await connectDB();
   const user = await User.findById(payload.sub);
   if (!user) return null;
-  return { id: String(user._id), email: user.email, name: user.name };
+  return {
+    id: String(user._id),
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    mustChangePassword: user.mustChangePassword,
+  };
 }

@@ -31,6 +31,8 @@ export function apiError(e: unknown): Response {
 export async function requireUser(): Promise<SessionUser> {
   const user = await getCurrentUser();
   if (!user) throw new ApiError(401, "Not authenticated");
+  // Users with a temporary password must rotate it before touching data APIs.
+  if (user.mustChangePassword) throw new ApiError(403, "Password change required");
   return user;
 }
 

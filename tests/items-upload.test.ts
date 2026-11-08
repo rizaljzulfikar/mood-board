@@ -40,6 +40,8 @@ describe("POST /api/projects/:id/items when MinIO write fails", () => {
       id: String(user._id),
       email: user.email,
       name: user.name,
+      role: "user",
+      mustChangePassword: false,
     });
 
     const fd = new FormData();
