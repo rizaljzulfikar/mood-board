@@ -14,6 +14,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (user.mustChangePassword) redirect("/change-password");
 
   if (!Types.ObjectId.isValid(id)) notFound();
   await connectDB();

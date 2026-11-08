@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function ProjectsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (user.mustChangePassword) redirect("/change-password");
   await connectDB();
   const projects = await Project.find({ $or: [{ owner: user.id }, { members: user.id }] })
     .sort({ updatedAt: -1 })

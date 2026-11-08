@@ -18,7 +18,10 @@ export async function POST(req: Request) {
     if (!user || !ok) return json({ error: "Invalid email or password" }, 401);
 
     await startSession(String(user._id));
-    return json({ user: { id: String(user._id), email: user.email, name: user.name } });
+    return json({
+      user: { id: String(user._id), email: user.email, name: user.name },
+      mustChangePassword: user.mustChangePassword,
+    });
   } catch (e) {
     return apiError(e);
   }

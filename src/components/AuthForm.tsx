@@ -24,13 +24,13 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(isRegister ? { email, name, password } : { email, password }),
       });
-      const data = (await res.json()) as { error?: string };
+      const data = (await res.json()) as { error?: string; mustChangePassword?: boolean };
       if (!res.ok) {
         setError(data.error ?? "Something went wrong");
         setPending(false);
         return;
       }
-      router.push("/projects");
+      router.push(data.mustChangePassword ? "/change-password" : "/projects");
       router.refresh();
     } catch {
       setError("Network error — is the server running?");
