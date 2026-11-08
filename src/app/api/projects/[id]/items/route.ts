@@ -2,6 +2,7 @@ import { apiError, json, requireMember } from "@/lib/api";
 import { imageSize } from "image-size";
 import { Item } from "@/lib/models/Item";
 import { createItemWithObject, extFromMime, itemJSON, MAX_UPLOAD_BYTES, ObjectStoreError } from "@/lib/items";
+import { broadcastUpsert } from "@/lib/realtime-publish";
 
 export const runtime = "nodejs";
 
@@ -58,6 +59,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         x,
         y,
       });
+      broadcastUpsert(String(project._id), "item", itemJSON(item));
       return json({ item: itemJSON(item) }, 201);
     } catch (e) {
       if (e instanceof ObjectStoreError) {

@@ -2,6 +2,7 @@ import { imageSize } from "image-size";
 import { apiError, json, requireMember } from "@/lib/api";
 import { createItemWithObject, extFromMime, itemJSON, MAX_UPLOAD_BYTES, ObjectStoreError } from "@/lib/items";
 import { apifyToken, fetchInstagramPost, isInstagramPostUrl } from "@/lib/instagram";
+import { broadcastUpsert } from "@/lib/realtime-publish";
 import { extractOgMeta, fetchRemote, parsePublicHttpUrl } from "@/lib/url-fetch";
 
 export const runtime = "nodejs";
@@ -201,6 +202,7 @@ async function importImage(args: {
       title: args.title ?? null,
       siteName: args.siteName ?? null,
     });
+    broadcastUpsert(String(args.projectId), "item", itemJSON(item));
     return json({ item: itemJSON(item) }, 201);
   } catch (e) {
     if (e instanceof ObjectStoreError) {

@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/db";
 import { Item } from "@/lib/models/Item";
 import { itemJSON } from "@/lib/items";
 import { cleanLabel } from "@/lib/groups";
+import { broadcastDelete, broadcastUpsert } from "@/lib/realtime-publish";
 
 export const runtime = "nodejs";
 
@@ -28,6 +29,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       if (item.deletedAt) throw new ApiError(404, "Item not found");
       item.deletedAt = new Date();
       await item.save();
+      broadcastDelete(String(item.project), "item", String(item._id));
       return json({ item: itemJSON(item) });
     }
     if (item.deletedAt && body.deleted !== false) throw new ApiError(404, "Item not found");
@@ -54,6 +56,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (label !== undefined) item.label = label;
 
     await item.save();
+    broadcastUpsert(String(item.project), "item", itemJSON(item));
     return json({ item: itemJSON(item) });
   } catch (e) {
     return apiError(e);
@@ -72,6 +75,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     // Soft delete so other clients' next sync learns about the removal.
     item.deletedAt = new Date();
     await item.save();
+    broadcastDelete(String(item.project), "item", String(item._id));
     return json({ ok: true });
   } catch (e) {
     return apiError(e);
