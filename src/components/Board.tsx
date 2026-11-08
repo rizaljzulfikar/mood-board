@@ -11,7 +11,8 @@ import {
 } from "@/lib/merge";
 import { applyPresenceEvent, applyRealtimeEvent, presenceFromHttp } from "@/lib/realtime-client";
 import type { PresenceUser, ServerMessage } from "@/lib/realtime-protocol";
-import { edgeAnchors, expandRectToContain, pointInRect, rectContainsItemCenter, topGroupContaining } from "@/lib/geometry";
+import { edgeAnchors, expandRectToContain, fitRectAroundItems, minGroupSizeForItems, pointInRect, rectContainsItemCenter, topGroupContaining } from "@/lib/geometry";
+import { cropEdgeGeometry, LINK_FOOTER_HEIGHT, type CropEdge, type CropGeometry } from "@/lib/crop";
 import { movedPastDragThreshold } from "@/lib/drag";
 import { extractPastePayload } from "@/lib/clipboard";
 import {
@@ -27,6 +28,12 @@ import {
   type Snapshot,
 } from "@/lib/history";
 import { fitViewport, toScreen, toWorld, zoomAt, type Viewport } from "@/lib/viewport";
+import {
+  createViewportSaver,
+  getLocalStorage,
+  loadViewport,
+  type ViewportSaver,
+} from "@/lib/viewport-storage";
 import { BoardItem } from "./BoardItem";
 import { GroupBox } from "./GroupBox";
 import { ConnectionLayer, type ConnectionPreview } from "./ConnectionLayer";
@@ -52,8 +59,18 @@ type DragState =
   | { kind: "pan"; startX: number; startY: number; vx: number; vy: number }
   | { kind: "move"; id: string; dx: number; dy: number }
   | { kind: "resize"; id: string; startX: number; startY: number; aspect: number }
+  | {
+      kind: "crop";
+      id: string;
+      edge: CropEdge;
+      startX: number;
+      startY: number;
+      /** Non-image chrome below the cropped image (link-card footer). */
+      bottomInset: number;
+      from: CropGeometry;
+    }
   | { kind: "group-move"; id: string; dx: number; dy: number; memberIds: string[] }
-  | { kind: "group-resize"; id: string }
+  | { kind: "group-resize"; id: string; memberIds: string[] }
   | { kind: "connect"; fromId: string; x: number; y: number }
   | null;
 
@@ -112,12 +129,18 @@ export function Board({
 
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
   const viewportRef = useRef(viewport);
+  const viewportSaverRef = useRef<ViewportSaver | null>(null);
 
   const [selection, setSelection] = useState<Selection>(null);
   const selectionRef = useRef<Selection>(null);
+  const [cropEditId, setCropEditId] = useState<string | null>(null);
   const select = useCallback((next: Selection) => {
     selectionRef.current = next;
     setSelection(next);
+    // Crop handles belong to one item; selecting anything else leaves the mode.
+    setCropEditId((current) =>
+      current && !(next?.kind === "item" && next.id === current) ? null : current
+    );
   }, []);
 
   const [labelEdit, setLabelEdit] = useState<{
@@ -241,8 +264,42 @@ export function Board({
 
   const updateViewport = useCallback((v: Viewport) => {
     viewportRef.current = v;
+    viewportSaverRef.current?.schedule(v);
     setViewport(v);
   }, []);
+
+  /* ---------- viewport persistence ---------- */
+
+  // Restore this project's last viewport after hydration, then keep it saved.
+  // Restoring in an effect (not initial state) keeps the first client render
+  // identical to the server-rendered markup, so there is no hydration mismatch.
+  useEffect(() => {
+    const storage = getLocalStorage();
+    const saved = loadViewport(storage, projectId);
+    if (saved) {
+      viewportRef.current = saved;
+      setViewport(saved);
+    }
+
+    const saver = createViewportSaver(storage, projectId);
+    viewportSaverRef.current = saver;
+
+    const flush = () => saver.flush();
+    const onVisibilityChange = () => {
+      // Mobile browsers may never fire pagehide; a tab switch is the last
+      // reliable moment to persist the position.
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      flush();
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (viewportSaverRef.current === saver) viewportSaverRef.current = null;
+    };
+  }, [projectId]);
 
   /* ---------- upload ---------- */
 
@@ -288,7 +345,10 @@ export function Board({
   /* ---------- persistence ---------- */
 
   const patchItem = useCallback(
-    async (id: string, patch: Partial<Pick<ItemState, "x" | "y" | "width" | "height" | "z">>) => {
+    async (
+      id: string,
+      patch: Partial<Pick<ItemState, "x" | "y" | "width" | "height" | "z" | "crop">>
+    ) => {
       const res = await track(
         fetch(`/api/items/${id}`, {
           method: "PATCH",
@@ -568,6 +628,42 @@ export function Board({
     [queueDrag, screenToBoard]
   );
 
+  /** Double-clicking the resize handle toggles four-edge crop mode. */
+  const toggleCrop = useCallback(
+    (item: ItemState) => {
+      select({ kind: "item", id: item.id });
+      setCropEditId((current) => (current === item.id ? null : item.id));
+    },
+    [select]
+  );
+
+  const startCropResize = useCallback(
+    (e: ReactPointerEvent, item: ItemState, edge: CropEdge) => {
+      const board = screenToBoard(e.clientX, e.clientY);
+      const world = toWorld(board.x, board.y, viewportRef.current);
+      queueDrag(
+        e,
+        {
+          kind: "crop",
+          id: item.id,
+          edge,
+          startX: world.x,
+          startY: world.y,
+          bottomInset: item.kind === "link" ? LINK_FOOTER_HEIGHT : 0,
+          from: {
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            crop: item.crop,
+          },
+        },
+        () => lockedRef.current.add(item.id)
+      );
+    },
+    [queueDrag, screenToBoard]
+  );
+
   const startGroupMove = useCallback(
     (e: ReactPointerEvent, group: GroupState) => {
       if (e.button === 1) return; // middle button pans
@@ -611,11 +707,51 @@ export function Board({
 
   const startGroupResize = useCallback(
     (e: ReactPointerEvent, group: GroupState) => {
-      queueDrag(e, { kind: "group-resize", id: group.id }, () =>
+      // Contents captured at drag start: the box may not be dragged smaller
+      // than the images it holds, and the set must not shift mid-drag.
+      const memberIds = itemsRef.current
+        .filter((i) => rectContainsItemCenter(group, i))
+        .map((i) => i.id);
+      queueDrag(e, { kind: "group-resize", id: group.id, memberIds }, () =>
         lockedRef.current.add(group.id)
       );
     },
     [queueDrag]
+  );
+
+  /**
+   * Double-clicking the group resize handle fits the box to its contents on
+   * all four sides: the box moves and resizes so every image whose center it
+   * holds sits exactly `GROUP_BUCKET_PADDING` from each edge (never below
+   * MIN_GROUP_DIM). Images keep their positions. A group larger than its
+   * images stays larger until this is used.
+   */
+  const fitGroupToContent = useCallback(
+    (group: GroupState) => {
+      const members = itemsRef.current.filter((i) => rectContainsItemCenter(group, i));
+      const fitted = fitRectAroundItems(members, GROUP_BUCKET_PADDING, MIN_GROUP_DIM);
+      if (!fitted) return;
+      const next = {
+        x: fitted.x,
+        y: fitted.y,
+        width: Math.min(MAX_DIM, fitted.width),
+        height: Math.min(MAX_DIM, fitted.height),
+      };
+      if (
+        next.x === group.x &&
+        next.y === group.y &&
+        next.width === group.width &&
+        next.height === group.height
+      ) {
+        return;
+      }
+      setGroupsBoth(
+        groupsRef.current.map((g) => (g.id === group.id ? { ...g, ...next } : g))
+      );
+      void patchGroup(group.id, next);
+      commitSettled();
+    },
+    [commitSettled, patchGroup, setGroupsBoth]
   );
 
   const startConnect = useCallback(
@@ -728,6 +864,22 @@ export function Board({
             i.id === drag.id ? { ...i, width, height } : i
           )
         );
+      } else if (drag.kind === "crop") {
+        const next = cropEdgeGeometry(
+          drag.from,
+          drag.edge,
+          world.x - drag.startX,
+          world.y - drag.startY,
+          MIN_DIM,
+          drag.bottomInset
+        );
+        setItemsBoth(
+          itemsRef.current.map((i) =>
+            i.id === drag.id
+              ? { ...i, x: next.x, y: next.y, width: next.width, height: next.height, crop: next.crop }
+              : i
+          )
+        );
       } else if (drag.kind === "group-move") {
         const group = groupsRef.current.find((g) => g.id === drag.id);
         if (!group) return;
@@ -747,8 +899,16 @@ export function Board({
       } else if (drag.kind === "group-resize") {
         const group = groupsRef.current.find((g) => g.id === drag.id);
         if (!group) return;
-        const width = Math.min(MAX_DIM, Math.max(MIN_GROUP_DIM, world.x - group.x));
-        const height = Math.min(MAX_DIM, Math.max(MIN_GROUP_DIM, world.y - group.y));
+        const memberIds = new Set(drag.memberIds);
+        const members = itemsRef.current.filter((i) => memberIds.has(i.id));
+        const min = minGroupSizeForItems(
+          group,
+          members,
+          GROUP_BUCKET_PADDING,
+          MIN_GROUP_DIM
+        );
+        const width = Math.min(MAX_DIM, Math.max(min.width, world.x - group.x));
+        const height = Math.min(MAX_DIM, Math.max(min.height, world.y - group.y));
         setGroupsBoth(
           groupsRef.current.map((g) => (g.id === drag.id ? { ...g, width, height } : g))
         );
@@ -831,6 +991,18 @@ export function Board({
           lockedRef.current.delete(drag.id);
           void patchItem(drag.id, { width: item.width, height: item.height });
         }
+      } else if (drag.kind === "crop") {
+        const item = itemsRef.current.find((i) => i.id === drag.id);
+        if (item) {
+          lockedRef.current.delete(drag.id);
+          void patchItem(drag.id, {
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            crop: item.crop,
+          });
+        }
       } else if (drag.kind === "group-move") {
         const group = groupsRef.current.find((g) => g.id === drag.id);
         lockedRef.current.delete(drag.id);
@@ -893,6 +1065,7 @@ export function Board({
       if (e.key === "Escape") {
         select(null);
         setLabelEdit(null);
+        setCropEditId(null);
       }
       if ((e.key === "Delete" || e.key === "Backspace") && sel) {
         if (sel.kind === "item") void deleteItem(sel.id);
@@ -1172,12 +1345,14 @@ export function Board({
           <GroupBox
             key={group.id}
             group={group}
+            scale={v.scale}
             selected={selection?.kind === "group" && selection.id === group.id}
             bucketTarget={bucketTargetId === group.id}
             editing={labelEdit?.id === group.id}
             draftLabel={labelEdit?.draft ?? ""}
             onGroupPointerDown={startGroupMove}
             onResizePointerDown={startGroupResize}
+            onResizeDoubleClick={fitGroupToContent}
             onLinkPointerDown={startConnect}
             onLabelDoubleClick={(g) => setLabelEdit({ id: g.id, draft: g.label, target: "group" })}
             onLabelChange={(value) =>
@@ -1202,10 +1377,13 @@ export function Board({
             key={item.id}
             item={item}
             selected={selection?.kind === "item" && selection.id === item.id}
+            cropping={cropEditId === item.id}
             editing={labelEdit?.target === "item" && labelEdit.id === item.id}
             draftLabel={labelEdit?.target === "item" ? (labelEdit?.draft ?? "") : ""}
             onItemPointerDown={startMove}
             onResizePointerDown={startResize}
+            onCropToggle={toggleCrop}
+            onCropPointerDown={startCropResize}
             onLabelDoubleClick={startItemLabelEdit}
             onLabelChange={(value) =>
               setLabelEdit((prev) => (prev ? { ...prev, draft: value } : prev))

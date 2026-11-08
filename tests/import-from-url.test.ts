@@ -245,4 +245,162 @@ describe("POST /api/projects/:id/items/from-url", () => {
     expect(data.error).not.toMatch(/APIFY_TOKEN/);
     expect(await Item.countDocuments({ project: project._id })).toBe(0);
   });
+
+  it("imports a TikTok video using the origin cover instead of the share card", async () => {
+    const crawlerPage = `<html><head>
+      <title>TikTok · Josh Renaud</title>
+      <meta property="og:site_name" content="TikTok"/>
+      <meta property="og:image" content="https://p16-common-sign.tiktokcdn.test/share-card.jpg"/>
+      <meta property="og:title" content="TikTok · Josh Renaud"/>
+    </head></html>`;
+    const regularPage = `<html><head>
+      <link rel="preload" as="image" fetchpriority="high"
+        href="https://p16-common-sign.tiktokcdn.test/origin-cover.jpg?x=1&amp;y=2"
+        data-source="ssr-cover-preload">
+    </head></html>`;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(htmlResponse(crawlerPage))
+      .mockResolvedValueOnce(htmlResponse(regularPage))
+      .mockResolvedValueOnce(imageResponse(PNG_1X1, "image/jpeg"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await importUrl("https://www.tiktok.com/@josheramics/video/6718335390845095173");
+    expect(res.status).toBe(201);
+
+    const { item } = (await res.json()) as { item: Record<string, unknown> };
+    expect(item.kind).toBe("link");
+    // "TikTok · " prefix is dropped, creator handle becomes the site name.
+    expect(item.title).toBe("Josh Renaud");
+    expect(item.siteName).toBe("@josheramics");
+    expect(item.sourceUrl).toBe("https://www.tiktok.com/@josheramics/video/6718335390845095173");
+
+    // The native origin cover wins over the 1200x630 letterboxed share card.
+    expect(String(fetchMock.mock.calls[2][0])).toBe(
+      "https://p16-common-sign.tiktokcdn.test/origin-cover.jpg?x=1&y=2"
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    // The crawler fetch still uses the preview-bot UA for the OG metadata.
+    const firstInit = fetchMock.mock.calls[0][1] as RequestInit;
+    expect((firstInit.headers as Record<string, string>)["user-agent"]).toMatch(
+      /facebookexternalhit/
+    );
+    // The cover page is fetched like a normal browser.
+    const secondInit = fetchMock.mock.calls[1][1] as RequestInit;
+    expect((secondInit.headers as Record<string, string>)["user-agent"]).toMatch(/Chrome/);
+  });
+
+  it("falls back to the TikTok share card when no origin cover is preloaded", async () => {
+    const crawlerPage = `<html><head>
+      <meta property="og:site_name" content="TikTok"/>
+      <meta property="og:image" content="https://p16-common-sign.tiktokcdn.test/share-card.jpg"/>
+      <meta property="og:title" content="TikTok · Josh Renaud"/>
+    </head></html>`;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(htmlResponse(crawlerPage))
+      .mockResolvedValueOnce(htmlResponse("<html></html>"))
+      .mockResolvedValueOnce(imageResponse(PNG_1X1, "image/jpeg"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await importUrl("https://www.tiktok.com/@josheramics/video/6718335390845095173");
+    expect(res.status).toBe(201);
+    expect(String(fetchMock.mock.calls[2][0])).toBe(
+      "https://p16-common-sign.tiktokcdn.test/share-card.jpg"
+    );
+  });
+
+  it("follows a TikTok short link and keeps the crawler UA for metadata", async () => {
+    const crawlerPage = `<html><head>
+      <meta property="og:site_name" content="TikTok"/>
+      <meta property="og:image" content="https://p16-common-sign.tiktokcdn.test/share-card.jpg"/>
+      <meta property="og:title" content="TikTok · Short link creator"/>
+    </head></html>`;
+    const regularPage = `<link data-source="ssr-cover-preload" href="https://p16-common-sign.tiktokcdn.test/short.jpg">`;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: { location: "https://www.tiktok.com/@shortie/video/7000000000000000000" },
+        })
+      )
+      .mockResolvedValueOnce(htmlResponse(crawlerPage))
+      .mockResolvedValueOnce(htmlResponse(regularPage))
+      .mockResolvedValueOnce(imageResponse(PNG_1X1, "image/jpeg"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await importUrl("https://vm.tiktok.com/ZMre7abcd/");
+    expect(res.status).toBe(201);
+
+    const { item } = (await res.json()) as { item: Record<string, unknown> };
+    expect(item.kind).toBe("link");
+    expect(item.sourceUrl).toBe("https://www.tiktok.com/@shortie/video/7000000000000000000");
+    expect(item.siteName).toBe("@shortie");
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    // Redirect hop + crawler page both use the preview-bot UA.
+    for (const call of fetchMock.mock.calls.slice(0, 2)) {
+      const init = call[1] as RequestInit;
+      expect((init.headers as Record<string, string>)["user-agent"]).toMatch(
+        /facebookexternalhit/
+      );
+    }
+  });
+
+  it("reports a TikTok link without a preview", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => htmlResponse("<html><head><title>TikTok</title></head></html>"))
+    );
+
+    const res = await importUrl("https://www.tiktok.com/@scout2015/video/6718335390845095173");
+    expect(res.status).toBe(422);
+    const data = (await res.json()) as { error?: string };
+    expect(data.error).toMatch(/TikTok didn't return a preview/i);
+    expect(await Item.countDocuments({ project: project._id })).toBe(0);
+  });
+
+  it("creates a link card from a Pinterest pin (content-first meta tags)", async () => {
+    const page = `<html><head>
+      <meta content="Pinterest" property="og:site_name"/>
+      <meta content="https://i.pinimg.test/736x/ff/b1/10/vase.jpg" name="og:image" property="og:image"/>
+      <meta content="P Shape Ceramic Vase" name="og:title" property="og:title"/>
+    </head></html>`;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(htmlResponse(page))
+      .mockResolvedValueOnce(imageResponse(PNG_1X1, "image/jpeg"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await importUrl(
+      "https://www.pinterest.com/pin/p-shape-ceramic-vase-personalized-home-decor--1013028509922229190/"
+    );
+    expect(res.status).toBe(201);
+
+    const { item } = (await res.json()) as { item: Record<string, unknown> };
+    expect(item.kind).toBe("link");
+    expect(item.title).toBe("P Shape Ceramic Vase");
+    expect(item.siteName).toBe("Pinterest");
+    expect(String(fetchMock.mock.calls[1][0])).toBe(
+      "https://i.pinimg.test/736x/ff/b1/10/vase.jpg"
+    );
+
+    // Pinterest serves its preview to a normal browser UA.
+    const firstInit = fetchMock.mock.calls[0][1] as RequestInit;
+    expect((firstInit.headers as Record<string, string>)["user-agent"]).toMatch(/Chrome/);
+  });
+
+  it("reports a Pinterest pin without a preview", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => htmlResponse("<html><head><title>Pinterest</title></head></html>"))
+    );
+
+    const res = await importUrl("https://pin.it/4Zb6cde");
+    expect(res.status).toBe(422);
+    const data = (await res.json()) as { error?: string };
+    expect(data.error).toMatch(/Pinterest didn't return a preview/i);
+    expect(await Item.countDocuments({ project: project._id })).toBe(0);
+  });
 });

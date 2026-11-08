@@ -12,6 +12,8 @@ export type ItemState = {
   height: number;
   rotation: number;
   z: number;
+  /** Non-destructive crop of the stored image, as 0..1 fractions. */
+  crop: { x: number; y: number; w: number; h: number };
   objectKey: string;
   originalName: string;
   mime: string;

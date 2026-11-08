@@ -16,6 +16,13 @@ const FETCH_TIMEOUT_MS = 15_000;
 const USER_AGENT =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
+/**
+ * Link-preview crawler UA. TikTok serves its Open Graph card only to social
+ * preview bots (Facebook/Twitter/Telegram), not to regular browsers.
+ */
+export const PREVIEW_BOT_USER_AGENT =
+  "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)";
+
 /** True for IPv4/IPv6 literals that must never be fetched (SSRF). */
 export function isPrivateAddress(addr: string): boolean {
   const a = addr.toLowerCase().replace(/^\[|\]$/g, "").replace(/%.*$/, "");
@@ -84,12 +91,21 @@ export type RemoteFetch = {
   finalUrl: string;
 };
 
+export type FetchRemoteOptions = {
+  /** Override the default browser UA (e.g. a preview-bot UA for TikTok). */
+  userAgent?: string;
+};
+
 /**
  * Fetch a public URL, following redirects (each hop re-validated), with a
  * hard cap on the response size. Throws Error with a short code-ish message;
  * routes map those to user-facing errors.
  */
-export async function fetchRemote(rawUrl: string, maxBytes: number): Promise<RemoteFetch> {
+export async function fetchRemote(
+  rawUrl: string,
+  maxBytes: number,
+  opts: FetchRemoteOptions = {}
+): Promise<RemoteFetch> {
   let current = parsePublicHttpUrl(rawUrl);
   if (!current) throw new Error("bad-url");
 
@@ -100,7 +116,7 @@ export async function fetchRemote(rawUrl: string, maxBytes: number): Promise<Rem
       res = await fetch(current, {
         redirect: "manual",
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        headers: { "user-agent": USER_AGENT, accept: "*/*" },
+        headers: { "user-agent": opts.userAgent ?? USER_AGENT, accept: "*/*" },
       });
     } catch (e) {
       throw new Error(e instanceof Error && e.name === "TimeoutError" ? "timeout" : "fetch-failed");

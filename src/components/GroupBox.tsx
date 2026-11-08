@@ -6,12 +6,14 @@ import type { GroupState } from "@/lib/merge";
 
 export function GroupBox({
   group,
+  scale,
   selected,
   bucketTarget,
   editing,
   draftLabel,
   onGroupPointerDown,
   onResizePointerDown,
+  onResizeDoubleClick,
   onLinkPointerDown,
   onLabelDoubleClick,
   onLabelChange,
@@ -19,12 +21,15 @@ export function GroupBox({
   onLabelCancel,
 }: {
   group: GroupState;
+  /** Viewport zoom, used to keep the label at a constant screen size. */
+  scale: number;
   selected: boolean;
   bucketTarget: boolean;
   editing: boolean;
   draftLabel: string;
   onGroupPointerDown: (e: ReactPointerEvent, group: GroupState) => void;
   onResizePointerDown: (e: ReactPointerEvent, group: GroupState) => void;
+  onResizeDoubleClick: (group: GroupState) => void;
   onLinkPointerDown: (e: ReactPointerEvent, group: GroupState) => void;
   onLabelDoubleClick: (group: GroupState) => void;
   onLabelChange: (value: string) => void;
@@ -51,7 +56,17 @@ export function GroupBox({
         onLabelDoubleClick(group);
       }}
     >
-      <div className="group-label">
+      <div
+        className="group-label"
+        style={{
+          // Cancel the world zoom so the label keeps a fixed screen size, and
+          // keep a constant 8px gap above the box (translate is scaled by the
+          // inverse transform, so it stays 8px on screen at every zoom).
+          transform: `scale(${1 / scale}) translateY(-8px)`,
+          transformOrigin: "left bottom",
+          maxWidth: group.width * scale,
+        }}
+      >
         {editing ? (
           <input
             ref={inputRef}
@@ -76,10 +91,15 @@ export function GroupBox({
         <>
           <div
             className="group-resize-handle"
-            title="Resize"
+            title="Drag to resize · double-click to fit to contents"
             onPointerDown={(e) => {
               e.stopPropagation();
               onResizePointerDown(e, group);
+            }}
+            onDoubleClick={(e) => {
+              // Otherwise the box's own double-click would rename the label.
+              e.stopPropagation();
+              onResizeDoubleClick(group);
             }}
           />
           <div

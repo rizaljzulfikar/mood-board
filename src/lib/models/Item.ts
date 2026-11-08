@@ -14,6 +14,8 @@ export interface ItemDoc extends Document<Types.ObjectId> {
   y: number;
   rotation: number;
   z: number;
+  /** Non-destructive crop of the stored image, as 0..1 fractions. */
+  crop: { x: number; y: number; w: number; h: number };
   /** Where an imported item came from (null for direct uploads). */
   sourceUrl: string | null;
   /** Page title for link cards. */
@@ -26,6 +28,16 @@ export interface ItemDoc extends Document<Types.ObjectId> {
   createdAt: Date;
   updatedAt: Date;
 }
+
+const cropSchema = new Schema(
+  {
+    x: { type: Number, required: true, default: 0, min: 0, max: 1 },
+    y: { type: Number, required: true, default: 0, min: 0, max: 1 },
+    w: { type: Number, required: true, default: 1, min: 0.02, max: 1 },
+    h: { type: Number, required: true, default: 1, min: 0.02, max: 1 },
+  },
+  { _id: false }
+);
 
 const itemSchema = new Schema(
   {
@@ -41,6 +53,7 @@ const itemSchema = new Schema(
     y: { type: Number, required: true },
     rotation: { type: Number, required: true, default: 0 },
     z: { type: Number, required: true, default: 0 },
+    crop: { type: cropSchema, required: true, default: () => ({ x: 0, y: 0, w: 1, h: 1 }) },
     sourceUrl: { type: String, default: null },
     title: { type: String, default: null },
     siteName: { type: String, default: null },

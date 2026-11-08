@@ -4,3 +4,7 @@ node_modules/
 .env*.local
 .superpowers/
 *.log
+
+# Local-only deployment (see docker-compose.local.yml)
+docker-compose.local.yml
+docker/local/

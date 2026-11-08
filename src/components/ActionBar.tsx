@@ -5,17 +5,50 @@ import {
   CircleNotch,
   InstagramLogo,
   Link as LinkIcon,
+  PinterestLogo,
   SquaresFour,
+  TiktokLogo,
   UploadSimple,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { isInstagramPostUrl } from "@/lib/instagram-url";
+import { isInstagramPostUrl, isPinterestPinUrl, isTikTokPostUrl } from "@/lib/social-url";
 
 const ICON = { size: 18, weight: "bold" as const };
 const SMALL_ICON = { size: 15, weight: "bold" as const };
 
-type SubmitMode = "link" | "instagram";
+type SubmitMode = "link" | "instagram" | "tiktok" | "pinterest";
+
+/** Dedicated import buttons, mirroring the Instagram one. */
+const PLATFORMS = [
+  {
+    mode: "instagram",
+    label: "Instagram",
+    Icon: InstagramLogo,
+    accepts: isInstagramPostUrl,
+    invalid: "Enter an Instagram post or reel link",
+  },
+  {
+    mode: "tiktok",
+    label: "TikTok",
+    Icon: TiktokLogo,
+    accepts: isTikTokPostUrl,
+    invalid: "Enter a TikTok video link",
+  },
+  {
+    mode: "pinterest",
+    label: "Pinterest",
+    Icon: PinterestLogo,
+    accepts: isPinterestPinUrl,
+    invalid: "Enter a Pinterest pin link",
+  },
+] as const satisfies ReadonlyArray<{
+  mode: Exclude<SubmitMode, "link">;
+  label: string;
+  Icon: typeof InstagramLogo;
+  accepts: (url: URL) => boolean;
+  invalid: string;
+}>;
 
 /** Parse an http(s) URL, or null when the input is not one. */
 function toHttpUrl(raw: string): URL | null {
@@ -38,7 +71,7 @@ export function ActionBar({
   importingLink: boolean;
   onUploadClick: () => void;
   onAddGroup: () => void;
-  /** Import a link or Instagram post; resolves to an error message or null. */
+  /** Import a link or social post; resolves to an error message or null. */
   onAddLink: (url: string) => Promise<string | null>;
 }) {
   const [open, setOpen] = useState(false);
@@ -75,8 +108,9 @@ export function ActionBar({
       setLinkError("Enter a valid http(s) link");
       return;
     }
-    if (mode === "instagram" && !isInstagramPostUrl(url)) {
-      setLinkError("Enter an Instagram post or reel link");
+    const platform = PLATFORMS.find((p) => p.mode === mode);
+    if (platform && !platform.accepts(url)) {
+      setLinkError(platform.invalid);
       return;
     }
     setLinkError(null);
@@ -115,7 +149,7 @@ export function ActionBar({
           className="action-bar-button"
           type="button"
           onClick={openDialog}
-          title="Add a link or import from Instagram"
+          title="Add a link or import from a social platform"
           aria-label="Add link"
         >
           <LinkIcon {...ICON} />
@@ -196,20 +230,29 @@ export function ActionBar({
                   )}
                   Add link
                 </button>
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() => void submit("instagram")}
-                  disabled={busy || !linkUrl.trim()}
-                  title="Import an Instagram post as a card"
-                >
-                  {pending === "instagram" ? (
-                    <CircleNotch {...SMALL_ICON} className="spin" />
-                  ) : (
-                    <InstagramLogo {...SMALL_ICON} />
-                  )}
-                  Import from Instagram
-                </button>
+              </div>
+              <div className="link-dialog-platforms">
+                <span className="link-dialog-platforms-label">Import from</span>
+                <div className="link-dialog-platform-buttons">
+                  {PLATFORMS.map(({ mode, label, Icon }) => (
+                    <button
+                      key={mode}
+                      className="ghost-button"
+                      type="button"
+                      onClick={() => void submit(mode)}
+                      disabled={busy || !linkUrl.trim()}
+                      title={`Import from ${label}`}
+                      aria-label={`Import from ${label}`}
+                    >
+                      {pending === mode ? (
+                        <CircleNotch {...SMALL_ICON} className="spin" />
+                      ) : (
+                        <Icon {...SMALL_ICON} />
+                      )}
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </form>
           </div>

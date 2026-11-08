@@ -163,7 +163,7 @@ export async function waitForSettled(promises: Set<Promise<unknown>>): Promise<v
 }
 
 /** Fields compared per kind; `updatedAt` is excluded everywhere. */
-const ITEM_FIELDS = ["x", "y", "width", "height", "z", "rotation", "label"] as const;
+const ITEM_FIELDS = ["x", "y", "width", "height", "z", "rotation", "label", "crop"] as const;
 const GROUP_FIELDS = ["x", "y", "width", "height", "z", "label"] as const;
 const CONNECTION_FIELDS = ["style"] as const;
 
@@ -174,7 +174,14 @@ function diffFields<T extends Record<string, unknown>>(
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {};
   for (const field of fields) {
-    if (target[field] !== current[field]) body[field] = target[field];
+    // Objects (crop) compare by value; primitives keep identity semantics.
+    const a = target[field];
+    const b = current[field];
+    if (typeof a === "object" || typeof b === "object") {
+      if (JSON.stringify(a) !== JSON.stringify(b)) body[field] = a;
+    } else if (a !== b) {
+      body[field] = a;
+    }
   }
   return body;
 }

@@ -5,6 +5,7 @@ import { connectDB } from "@/lib/db";
 import { Project } from "@/lib/models/Project";
 import { CreateProjectForm } from "@/components/CreateProjectForm";
 import { LogoutButton } from "@/components/LogoutButton";
+import { ProjectList, type ListProject } from "@/components/ProjectList";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,14 @@ export default async function ProjectsPage() {
   const projects = await Project.find({ $or: [{ owner: user.id }, { members: user.id }] })
     .sort({ updatedAt: -1 })
     .populate("owner", "email name");
+
+  const list: ListProject[] = projects.map((p) => ({
+    id: String(p._id),
+    name: p.name,
+    role: p.owner.equals(user.id) ? "owner" : "member",
+    memberCount: 1 + p.members.length,
+    archived: p.archived ?? false,
+  }));
 
   return (
     <main className="projects-page">
@@ -37,25 +46,7 @@ export default async function ProjectsPage() {
 
       <CreateProjectForm />
 
-      {projects.length === 0 ? (
-        <p className="projects-empty">
-          No projects yet — create one above, then drag images onto its canvas.
-        </p>
-      ) : (
-        <ul className="project-list">
-          {projects.map((p) => (
-            <li key={String(p._id)}>
-              <Link href={`/projects/${p._id}`} className="project-card">
-                <span className="project-name">{p.name}</span>
-                <span className="project-meta">
-                  {p.owner.equals(user.id) ? "Owner" : "Member"} ·{" "}
-                  {1 + p.members.length} {1 + p.members.length === 1 ? "member" : "members"}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      <ProjectList projects={list} />
     </main>
   );
 }

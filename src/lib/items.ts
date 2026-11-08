@@ -3,6 +3,7 @@ import type { ItemDoc } from "./models/Item";
 import { Item } from "./models/Item";
 import { buildObjectKey } from "./storage-key";
 import { putObjectBuffer } from "./minio";
+import { normalizeCrop } from "./crop";
 
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 20 MB
 
@@ -33,6 +34,7 @@ export function itemJSON(item: ItemDoc) {
     y: item.y,
     rotation: item.rotation,
     z: item.z,
+    crop: normalizeCrop(item.crop),
     sourceUrl: item.sourceUrl ?? null,
     title: item.title ?? null,
     siteName: item.siteName ?? null,
@@ -87,6 +89,7 @@ export async function createItemWithObject(input: CreateItemInput): Promise<Item
     x: input.x - input.width / 2,
     y: input.y - input.height / 2,
     z,
+    crop: { x: 0, y: 0, w: 1, h: 1 },
     sourceUrl: input.sourceUrl ?? null,
     title: input.title ?? null,
     siteName: input.siteName ?? null,

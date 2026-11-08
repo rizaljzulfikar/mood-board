@@ -20,6 +20,7 @@ export async function GET() {
         name: p.name,
         role: p.owner.equals(user.id) ? "owner" : "member",
         memberCount: 1 + p.members.length,
+        archived: p.archived ?? false,
         updatedAt: p.updatedAt,
       })),
     });

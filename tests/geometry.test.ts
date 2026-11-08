@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   edgeAnchors,
   expandRectToContain,
+  fitRectAroundItems,
+  minGroupSizeForItems,
   pointInRect,
   rectCenter,
   rectContainsItemCenter,
@@ -125,6 +127,83 @@ describe("expandRectToContain", () => {
     const group = rect(0, 0, 500, 500);
     const item = rect(10, 10, 20, 20);
     expect(expandRectToContain(group, item, 16)).toEqual(rect(0, 0, 500, 500));
+  });
+});
+
+describe("minGroupSizeForItems", () => {
+  it("falls back to the floor when the group has no members", () => {
+    expect(minGroupSizeForItems(rect(10, 20, 100, 100), [], 32, 60)).toEqual({
+      width: 60,
+      height: 60,
+    });
+  });
+
+  it("covers the padded right and bottom extent of every member", () => {
+    const group = rect(100, 100, 200, 100);
+    const members = [rect(120, 140, 50, 40), rect(250, 110, 30, 30)];
+    // right: max(170, 280) + 32 = 312 → width 212
+    // bottom: max(180, 140) + 32 = 212 → height 112
+    expect(minGroupSizeForItems(group, members, 32, 60)).toEqual({
+      width: 212,
+      height: 112,
+    });
+  });
+
+  it("allows a group larger than its content", () => {
+    const group = rect(0, 0, 500, 400);
+    const members = [rect(20, 20, 80, 60)];
+    // The floor is the content size, not the current box: the caller keeps
+    // any larger box the user has already drawn.
+    expect(minGroupSizeForItems(group, members, 32, 60)).toEqual({
+      width: 132,
+      height: 112,
+    });
+  });
+
+  it("never returns less than the minimum dimension", () => {
+    const group = rect(0, 0, 300, 300);
+    const members = [rect(10, 10, 20, 20)];
+    expect(minGroupSizeForItems(group, members, 4, 60)).toEqual({
+      width: 60,
+      height: 60,
+    });
+  });
+});
+
+describe("fitRectAroundItems", () => {
+  it("returns null when there is nothing to wrap", () => {
+    expect(fitRectAroundItems([], 32, 60)).toBeNull();
+  });
+
+  it("wraps every item with padding on all four sides", () => {
+    const items = [rect(200, 180, 160, 100), rect(380, 200, 100, 60)];
+    // left 200-32=168, top 180-32=148, right 480+32=512, bottom 280+32=312
+    expect(fitRectAroundItems(items, 32, 60)).toEqual({
+      x: 168,
+      y: 148,
+      width: 344,
+      height: 164,
+    });
+  });
+
+  it("keeps the content top-left when the minimum dimension wins", () => {
+    const items = [rect(200, 180, 10, 10)];
+    expect(fitRectAroundItems(items, 4, 60)).toEqual({
+      x: 196,
+      y: 176,
+      width: 60,
+      height: 60,
+    });
+  });
+
+  it("moves leftward and upward for content that pokes out that way", () => {
+    const items = [rect(-40, -20, 100, 80)];
+    expect(fitRectAroundItems(items, 32, 60)).toEqual({
+      x: -72,
+      y: -52,
+      width: 164,
+      height: 144,
+    });
   });
 });
 

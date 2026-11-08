@@ -29,6 +29,7 @@ async function projectDetail(projectId: string, viewerId: string) {
       role: owner._id.equals(viewerId) ? "owner" : "member",
       owner: memberJSON(owner),
       members: members.map(memberJSON),
+      archived: project.archived ?? false,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
     },
@@ -61,11 +62,18 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   }
 }
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
     const { user, project } = await requireMember(id);
     if (!project.owner.equals(user.id)) throw new ApiError(403, "Only the owner can delete the project");
+
+    // Permanent deletion is destructive and unrecoverable — the caller must
+    // echo the exact project name so an accidental click can't wipe a board.
+    const body = (await req.json().catch(() => ({}))) as { name?: string };
+    if ((body.name ?? "").trim() !== project.name) {
+      throw new ApiError(400, "Type the project name exactly to confirm permanent deletion");
+    }
 
     // Canvas items from Mongo, then image objects from MinIO (best-effort).
     await Item.deleteMany({ project: project._id });

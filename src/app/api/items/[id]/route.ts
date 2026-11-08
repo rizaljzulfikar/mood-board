@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/db";
 import { Item } from "@/lib/models/Item";
 import { itemJSON } from "@/lib/items";
 import { cleanLabel } from "@/lib/groups";
+import { normalizeCrop } from "@/lib/crop";
 import { broadcastDelete, broadcastUpsert } from "@/lib/realtime-publish";
 
 export const runtime = "nodejs";
@@ -43,6 +44,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const rotation = num(body.rotation);
     const z = num(body.z);
     const label = cleanLabel(body.label);
+    const crop =
+      body.crop && typeof body.crop === "object" ? normalizeCrop(body.crop) : undefined;
 
     if (width !== undefined) width = Math.min(MAX_DIM, Math.max(MIN_DIM, width));
     if (height !== undefined) height = Math.min(MAX_DIM, Math.max(MIN_DIM, height));
@@ -54,6 +57,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (rotation !== undefined) item.rotation = rotation;
     if (z !== undefined) item.z = Math.round(z);
     if (label !== undefined) item.label = label;
+    if (crop !== undefined) item.set("crop", crop);
 
     await item.save();
     broadcastUpsert(String(item.project), "item", itemJSON(item));

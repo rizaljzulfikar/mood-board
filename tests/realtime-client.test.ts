@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { applyRealtimeEvent, applyPresenceEvent, presenceFromHttp, type BoardState } from "@/lib/realtime-client";
 
 const base: BoardState = {
-  items: [{ id: "i1", kind: "image", x: 0, y: 0, width: 1, height: 1, rotation: 0, z: 1, objectKey: "k", originalName: "n", mime: "image/png", sourceUrl: null, title: null, siteName: null, label: "", addedBy: "u", updatedAt: "2026-01-01T00:00:00.000Z" }],
+  items: [{ id: "i1", kind: "image", x: 0, y: 0, width: 1, height: 1, rotation: 0, z: 1, crop: { x: 0, y: 0, w: 1, h: 1 }, objectKey: "k", originalName: "n", mime: "image/png", sourceUrl: null, title: null, siteName: null, label: "", addedBy: "u", updatedAt: "2026-01-01T00:00:00.000Z" }],
   groups: [],
   connections: [],
 };

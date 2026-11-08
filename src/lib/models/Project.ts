@@ -4,6 +4,7 @@ export interface ProjectDoc extends Document<Types.ObjectId> {
   name: string;
   owner: Types.ObjectId;
   members: Types.ObjectId[];
+  archived: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -13,6 +14,7 @@ const projectSchema = new Schema(
     name: { type: String, required: true, trim: true, maxlength: 120 },
     owner: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     members: { type: [{ type: Schema.Types.ObjectId, ref: "User" }], default: [] },
+    archived: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

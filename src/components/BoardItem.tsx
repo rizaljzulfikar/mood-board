@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { ItemState } from "@/lib/merge";
+import { cropImageStyle, LINK_FOOTER_HEIGHT, type CropEdge } from "@/lib/crop";
 
 function LabelInput({
   inputRef,
@@ -37,10 +38,13 @@ function LabelInput({
 export function BoardItem({
   item,
   selected,
+  cropping,
   editing,
   draftLabel,
   onItemPointerDown,
   onResizePointerDown,
+  onCropToggle,
+  onCropPointerDown,
   onLabelDoubleClick,
   onLabelChange,
   onLabelCommit,
@@ -48,10 +52,13 @@ export function BoardItem({
 }: {
   item: ItemState;
   selected: boolean;
+  cropping: boolean;
   editing: boolean;
   draftLabel: string;
   onItemPointerDown: (e: ReactPointerEvent, item: ItemState) => void;
   onResizePointerDown: (e: ReactPointerEvent, item: ItemState) => void;
+  onCropToggle: (item: ItemState) => void;
+  onCropPointerDown: (e: ReactPointerEvent, item: ItemState, edge: CropEdge) => void;
   onLabelDoubleClick: (item: ItemState) => void;
   onLabelChange: (value: string) => void;
   onLabelCommit: () => void;
@@ -85,13 +92,16 @@ export function BoardItem({
     >
       {item.kind === "link" ? (
         <div className="link-card">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="link-thumb"
-            src={`/api/storage/${item.objectKey}`}
-            alt={item.title ?? item.siteName ?? item.originalName}
-            draggable={false}
-          />
+          <div className="link-thumb-frame">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="link-thumb"
+              src={`/api/storage/${item.objectKey}`}
+              alt={item.title ?? item.siteName ?? item.originalName}
+              draggable={false}
+              style={cropImageStyle(item.crop)}
+            />
+          </div>
           <div className="link-footer">
             {editing ? (
               <LabelInput
@@ -128,12 +138,15 @@ export function BoardItem({
         </div>
       ) : (
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/api/storage/${item.objectKey}`}
-            alt={item.originalName}
-            draggable={false}
-          />
+          <div className="item-image-frame">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/storage/${item.objectKey}`}
+              alt={item.originalName}
+              draggable={false}
+              style={cropImageStyle(item.crop)}
+            />
+          </div>
           {/* Caption strip below the image; visibility is CSS-driven
               (labeled / hovered / selected). */}
           <div className="item-caption" onPointerDown={beginPointer}>
@@ -154,13 +167,40 @@ export function BoardItem({
         </>
       )}
 
+      {cropping && (
+        <div
+          className="crop-overlay"
+          style={item.kind === "link" ? { bottom: LINK_FOOTER_HEIGHT } : undefined}
+          onPointerDown={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          {(["top", "right", "bottom", "left"] as const).map((edge) => (
+            <div
+              key={edge}
+              className={`crop-handle crop-handle-${edge}`}
+              title={`Drag to crop the ${edge} edge`}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                onCropPointerDown(e, item, edge);
+              }}
+            />
+          ))}
+        </div>
+      )}
+
       {selected && (
         <div
           className="resize-handle"
-          title="Resize"
+          title="Drag to resize · double-click to crop"
           onPointerDown={(e) => {
             e.stopPropagation();
             onResizePointerDown(e, item);
+          }}
+          onDoubleClick={(e) => {
+            // Otherwise the item's own double-click would open the label editor.
+            e.stopPropagation();
+            onCropToggle(item);
           }}
         />
       )}

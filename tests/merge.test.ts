@@ -10,6 +10,7 @@ function item(partial: Partial<ItemState> & { id: string }): ItemState {
     height: 80,
     rotation: 0,
     z: 1,
+    crop: { x: 0, y: 0, w: 1, h: 1 },
     objectKey: `${partial.id}.png`,
     originalName: "img.png",
     mime: "image/png",

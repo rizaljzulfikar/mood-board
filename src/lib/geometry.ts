@@ -60,6 +60,57 @@ export function expandRectToContain(rect: Rect, inner: Rect, padding: number): R
 }
 
 /**
+ * Smallest width/height a top-left-anchored group may have so that every
+ * member rect stays inside it, with `padding` clearance past its right and
+ * bottom edges. Never smaller than `minDim`; a group with no members is
+ * exactly `minDim` square.
+ */
+export function minGroupSizeForItems(
+  group: Rect,
+  members: Rect[],
+  padding: number,
+  minDim: number
+): { width: number; height: number } {
+  let right = group.x + minDim;
+  let bottom = group.y + minDim;
+  for (const m of members) {
+    right = Math.max(right, m.x + m.width + padding);
+    bottom = Math.max(bottom, m.y + m.height + padding);
+  }
+  return { width: right - group.x, height: bottom - group.y };
+}
+
+/**
+ * The smallest rect wrapping every item with `padding` clearance on all four
+ * sides, never thinner than `minDim` (keeping the content's top-left corner).
+ * Returns null when there is nothing to wrap, so callers can leave the box
+ * untouched.
+ */
+export function fitRectAroundItems(
+  items: Rect[],
+  padding: number,
+  minDim: number
+): Rect | null {
+  if (items.length === 0) return null;
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  for (const it of items) {
+    left = Math.min(left, it.x - padding);
+    top = Math.min(top, it.y - padding);
+    right = Math.max(right, it.x + it.width + padding);
+    bottom = Math.max(bottom, it.y + it.height + padding);
+  }
+  return {
+    x: left,
+    y: top,
+    width: Math.max(minDim, right - left),
+    height: Math.max(minDim, bottom - top),
+  };
+}
+
+/**
  * Anchors for a connection between two rects: the segment between the two
  * centers, clipped where it leaves `from` and where it enters `to`, so the
  * line starts and ends exactly on the box edges.

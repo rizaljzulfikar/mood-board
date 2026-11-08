@@ -24,6 +24,7 @@ function makeItem(id: string, overrides: Partial<ItemState> = {}): ItemState {
     height: 10,
     rotation: 0,
     z: 0,
+    crop: { x: 0, y: 0, w: 1, h: 1 },
     objectKey: "",
     originalName: "",
     mime: "image/png",
@@ -298,6 +299,7 @@ describe("planServerOps", () => {
           rotation: 0,
           z: 2,
           label: "hi",
+          crop: { x: 0, y: 0, w: 1, h: 1 },
         },
       },
     ]);

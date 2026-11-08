@@ -26,9 +26,14 @@ describe("project deletion broadcasts", () => {
       id: String(user._id), email: user.email, name: user.name, role: "user", mustChangePassword: false,
     });
 
-    const res = await DELETE(new Request("http://x", { method: "DELETE" }), {
-      params: Promise.resolve({ id: String(project._id) }),
-    });
+    const res = await DELETE(
+      new Request("http://x", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: project.name }),
+      }),
+      { params: Promise.resolve({ id: String(project._id) }) }
+    );
 
     expect(res.status).toBe(200);
     expect(vi.mocked(broadcastProjectDeleted)).toHaveBeenCalledWith(String(project._id));

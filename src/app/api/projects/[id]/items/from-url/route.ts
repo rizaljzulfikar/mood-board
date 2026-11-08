@@ -1,9 +1,18 @@
 import { imageSize } from "image-size";
 import { apiError, json, requireMember } from "@/lib/api";
 import { createItemWithObject, extFromMime, itemJSON, MAX_UPLOAD_BYTES, ObjectStoreError } from "@/lib/items";
+import { LINK_FOOTER_HEIGHT } from "@/lib/crop";
 import { apifyToken, fetchInstagramPost, isInstagramPostUrl } from "@/lib/instagram";
 import { broadcastUpsert } from "@/lib/realtime-publish";
-import { extractOgMeta, fetchRemote, parsePublicHttpUrl } from "@/lib/url-fetch";
+import { socialPlatform, tiktokUsername, type SocialPlatform } from "@/lib/social-url";
+import { extractTikTokCover } from "@/lib/tiktok";
+import {
+  extractOgMeta,
+  fetchRemote,
+  parsePublicHttpUrl,
+  PREVIEW_BOT_USER_AGENT,
+  type OgMeta,
+} from "@/lib/url-fetch";
 
 export const runtime = "nodejs";
 
@@ -44,11 +53,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const pageUrl = parsePublicHttpUrl(rawUrl);
     if (!pageUrl) return json({ error: "That doesn't look like a valid http(s) link" }, 400);
 
+    const platform = socialPlatform(pageUrl);
+
     // Instagram serves no og:image to anonymous clients, so OG scraping can't
     // extract previews from post links. Resolve them via the Apify actor when
     // configured; on any Apify failure fall through to the regular OG path.
     const apify = apifyToken();
-    if (apify && isInstagramPostUrl(pageUrl)) {
+    if (apify && platform === "instagram") {
       const post = await fetchInstagramPost(pageUrl, apify);
       if (post) {
         let thumb: Awaited<ReturnType<typeof fetchRemote>>;
@@ -79,7 +90,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     let page: Awaited<ReturnType<typeof fetchRemote>>;
     try {
-      page = await fetchRemote(pageUrl.toString(), MAX_UPLOAD_BYTES);
+      // TikTok only renders its Open Graph card for link-preview crawlers.
+      page = await fetchRemote(pageUrl.toString(), MAX_UPLOAD_BYTES, {
+        userAgent: platform === "tiktok" ? PREVIEW_BOT_USER_AGENT : undefined,
+      });
     } catch (e) {
       return json({ error: userMessage(e) }, 502);
     }
@@ -110,7 +124,40 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     // Page link: extract Open Graph preview and store its image as the thumbnail.
-    const meta = extractOgMeta(page.buffer.toString("utf8"), page.finalUrl);
+    const finalUrl = new URL(page.finalUrl);
+    const finalPlatform = socialPlatform(finalUrl) ?? platform;
+    let meta = extractOgMeta(page.buffer.toString("utf8"), page.finalUrl);
+
+    // A generic link that redirects to TikTok (e.g. a shared /t/ code reached
+    // from another host) needs a second, crawler-UA fetch: the browser-UA
+    // response carries no preview tags.
+    if (!meta.imageUrl && finalPlatform === "tiktok" && platform !== "tiktok") {
+      try {
+        page = await fetchRemote(page.finalUrl, MAX_UPLOAD_BYTES, {
+          userAgent: PREVIEW_BOT_USER_AGENT,
+        });
+        meta = extractOgMeta(page.buffer.toString("utf8"), page.finalUrl);
+      } catch {
+        // Keep the original page/meta and report the missing preview below.
+      }
+    }
+
+    // TikTok's share card letterboxes the video against a blurred backdrop.
+    // Prefer the origin cover that the regular video page preloads: it has the
+    // video's own aspect ratio, so the card is auto-cropped to the content.
+    if (finalPlatform === "tiktok") {
+      try {
+        const regular = await fetchRemote(page.finalUrl, MAX_UPLOAD_BYTES);
+        const cover = extractTikTokCover(
+          regular.buffer.toString("utf8"),
+          regular.finalUrl
+        );
+        if (cover) meta = { ...meta, imageUrl: cover };
+      } catch {
+        // Fall back to the OG share card.
+      }
+    }
+
     if (!meta.imageUrl) {
       if (isInstagramPostUrl(pageUrl) && !apifyToken()) {
         return json(
@@ -120,6 +167,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           },
           422
         );
+      }
+      if (finalPlatform === "tiktok") {
+        return json(
+          { error: "TikTok didn't return a preview for that link — it may be private or unavailable" },
+          422
+        );
+      }
+      if (finalPlatform === "pinterest") {
+        return json({ error: "Pinterest didn't return a preview for that pin" }, 422);
       }
       return json({ error: "No preview image found on that page" }, 422);
     }
@@ -134,6 +190,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       return json({ error: "The page's preview image could not be loaded" }, 422);
     }
 
+    const card = cardMeta(finalPlatform, page.finalUrl, meta);
     return importImage({
       projectId: String(project._id),
       userId: user.id,
@@ -144,13 +201,40 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       y,
       kind: "link",
       sourceUrl: page.finalUrl,
-      title: meta.title?.slice(0, 300) || null,
-      siteName: meta.siteName || new URL(page.finalUrl).hostname,
+      title: card.title,
+      siteName: card.siteName,
       errorStatus: 422,
     });
   } catch (e) {
     return apiError(e);
   }
+}
+
+/** Card title/site name for a page import, normalized per platform. */
+function cardMeta(
+  platform: SocialPlatform | null,
+  finalUrl: string,
+  meta: OgMeta
+): { title: string | null; siteName: string | null } {
+  const hostname = new URL(finalUrl).hostname.replace(/^www\./, "");
+  const title = meta.title?.slice(0, 300) || null;
+
+  if (platform === "tiktok") {
+    const username = tiktokUsername(new URL(finalUrl));
+    // TikTok's OG title is the creator's display name ("TikTok · Scout").
+    const displayName = meta.title?.replace(/^TikTok\s*[·|-]\s*/i, "").trim() ?? "";
+    return {
+      title:
+        displayName && displayName.toLowerCase() !== "tiktok"
+          ? displayName.slice(0, 300)
+          : null,
+      siteName: username ? `@${username}` : "TikTok",
+    };
+  }
+  if (platform === "pinterest") {
+    return { title, siteName: "Pinterest" };
+  }
+  return { title, siteName: meta.siteName || hostname };
 }
 
 /** Validate + measure an image buffer, store it, and create the item record. */
@@ -211,6 +295,3 @@ async function importImage(args: {
     return apiError(e);
   }
 }
-
-/** Footer strip height of link cards (see .link-footer in globals.css). */
-const LINK_FOOTER_HEIGHT = 52;
