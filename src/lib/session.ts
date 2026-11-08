@@ -1,4 +1,5 @@
 /** Pure session primitives: password hashing and JWT sign/verify. No request context. */
+import { randomInt } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { env } from "./env";
@@ -7,6 +8,19 @@ export const SESSION_COOKIE = "mb_token";
 export const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 7 days
 
 const BCRYPT_ROUNDS = 10;
+
+// Unambiguous alphabet: no i/l/o (lowercase), no I/L/O (uppercase), no 0/1.
+const TEMP_PASSWORD_ALPHABET =
+  "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const TEMP_PASSWORD_LENGTH = 16;
+
+export function generateTempPassword(): string {
+  let password = "";
+  for (let i = 0; i < TEMP_PASSWORD_LENGTH; i++) {
+    password += TEMP_PASSWORD_ALPHABET[randomInt(TEMP_PASSWORD_ALPHABET.length)];
+  }
+  return password;
+}
 
 export function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, BCRYPT_ROUNDS);
