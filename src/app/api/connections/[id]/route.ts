@@ -3,6 +3,7 @@ import { apiError, ApiError, json, requireMember } from "@/lib/api";
 import { Connection, type ConnectionStyle } from "@/lib/models/Connection";
 import { connectionJSON } from "@/lib/groups";
 import { connectDB } from "@/lib/db";
+import { broadcastDelete, broadcastUpsert } from "@/lib/realtime-publish";
 
 export const runtime = "nodejs";
 
@@ -22,6 +23,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       if (connection.deletedAt) throw new ApiError(404, "Connection not found");
       connection.deletedAt = new Date();
       await connection.save();
+      broadcastDelete(String(connection.project), "connection", String(connection._id));
       return json({ connection: connectionJSON(connection) });
     }
     if (connection.deletedAt && body.deleted !== false) {
@@ -33,6 +35,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
 
     await connection.save();
+    broadcastUpsert(String(connection.project), "connection", connectionJSON(connection));
     return json({ connection: connectionJSON(connection) });
   } catch (e) {
     return apiError(e);
@@ -51,6 +54,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     // Soft delete so other clients' next sync learns about the removal.
     connection.deletedAt = new Date();
     await connection.save();
+    broadcastDelete(String(connection.project), "connection", String(connection._id));
     return json({ ok: true });
   } catch (e) {
     return apiError(e);

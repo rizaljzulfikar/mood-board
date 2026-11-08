@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { apiError, json, requireMember } from "@/lib/api";
 import { Group } from "@/lib/models/Group";
 import { clampCoord, clampDim, cleanLabel, groupJSON } from "@/lib/groups";
+import { broadcastUpsert } from "@/lib/realtime-publish";
 
 export const runtime = "nodejs";
 
@@ -36,6 +37,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       deletedAt: null,
     });
 
+    broadcastUpsert(String(project._id), "group", groupJSON(group));
     return json({ group: groupJSON(group) }, 201);
   } catch (e) {
     return apiError(e);

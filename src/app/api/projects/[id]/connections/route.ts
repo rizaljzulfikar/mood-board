@@ -3,6 +3,7 @@ import { apiError, ApiError, json, requireMember } from "@/lib/api";
 import { Connection, type ConnectionStyle } from "@/lib/models/Connection";
 import { Group } from "@/lib/models/Group";
 import { connectionJSON } from "@/lib/groups";
+import { broadcastUpsert } from "@/lib/realtime-publish";
 
 export const runtime = "nodejs";
 
@@ -55,6 +56,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       deletedAt: null,
     });
 
+    broadcastUpsert(String(project._id), "connection", connectionJSON(connection));
     return json({ connection: connectionJSON(connection) }, 201);
   } catch (e) {
     return apiError(e);

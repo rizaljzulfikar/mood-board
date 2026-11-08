@@ -4,6 +4,7 @@ import { Group } from "@/lib/models/Group";
 import { Connection } from "@/lib/models/Connection";
 import { clampCoord, clampDim, cleanLabel, groupJSON } from "@/lib/groups";
 import { connectDB } from "@/lib/db";
+import { broadcastDelete, broadcastUpsert } from "@/lib/realtime-publish";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       if (group.deletedAt) throw new ApiError(404, "Group not found");
       group.deletedAt = new Date();
       await group.save();
+      broadcastDelete(String(group.project), "group", String(group._id));
       return json({ group: groupJSON(group) });
     }
     if (group.deletedAt && body.deleted !== false) throw new ApiError(404, "Group not found");
@@ -39,6 +41,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (typeof body.z === "number" && Number.isFinite(body.z)) group.z = Math.round(body.z);
 
     await group.save();
+    broadcastUpsert(String(group.project), "group", groupJSON(group));
     return json({ group: groupJSON(group) });
   } catch (e) {
     return apiError(e);
@@ -58,12 +61,20 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     // Connections dangling on this group go with it: an edge without both
     // endpoints is unrenderable.
     const now = new Date();
+    const affected = await Connection.find({
+      project: group.project,
+      deletedAt: null,
+      $or: [{ from: group._id }, { to: group._id }],
+    }).select("_id");
     group.deletedAt = now;
     await group.save();
     await Connection.updateMany(
       { project: group.project, deletedAt: null, $or: [{ from: group._id }, { to: group._id }] },
       { deletedAt: now }
     );
+    const projectId = String(group.project);
+    broadcastDelete(projectId, "group", String(group._id));
+    for (const c of affected) broadcastDelete(projectId, "connection", String(c._id));
     return json({ ok: true });
   } catch (e) {
     return apiError(e);
