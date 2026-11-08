@@ -23,6 +23,43 @@ export function rectContainsItemCenter(r: Rect, item: Rect): boolean {
 }
 
 /**
+ * The topmost-z rect whose rectangle contains the item's center, or null.
+ * Ties keep the earlier candidate, so the result is deterministic.
+ */
+export function topGroupContaining<T extends Rect & { z: number }>(
+  groups: T[],
+  item: Rect
+): T | null {
+  let best: T | null = null;
+  for (const g of groups) {
+    if (!rectContainsItemCenter(g, item)) continue;
+    if (!best || g.z > best.z) best = g;
+  }
+  return best;
+}
+
+/**
+ * Bucket behavior (grow-only): the smallest rect covering `rect` plus `inner`.
+ * Padding clearance applies only where `inner` actually pokes out of `rect`;
+ * an image already fully contained never swells the box. Never shrinks or
+ * moves `rect` inward.
+ */
+export function expandRectToContain(rect: Rect, inner: Rect, padding: number): Rect {
+  const fullyInside =
+    inner.x >= rect.x &&
+    inner.y >= rect.y &&
+    inner.x + inner.width <= rect.x + rect.width &&
+    inner.y + inner.height <= rect.y + rect.height;
+  if (fullyInside) return { ...rect };
+
+  const x = Math.min(rect.x, inner.x - padding);
+  const y = Math.min(rect.y, inner.y - padding);
+  const right = Math.max(rect.x + rect.width, inner.x + inner.width + padding);
+  const bottom = Math.max(rect.y + rect.height, inner.y + inner.height + padding);
+  return { x, y, width: right - x, height: bottom - y };
+}
+
+/**
  * Anchors for a connection between two rects: the segment between the two
  * centers, clipped where it leaves `from` and where it enters `to`, so the
  * line starts and ends exactly on the box edges.

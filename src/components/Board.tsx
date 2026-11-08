@@ -9,7 +9,7 @@ import {
   type GroupState,
   type ItemState,
 } from "@/lib/merge";
-import { edgeAnchors, pointInRect, rectContainsItemCenter } from "@/lib/geometry";
+import { edgeAnchors, expandRectToContain, pointInRect, rectContainsItemCenter, topGroupContaining } from "@/lib/geometry";
 import { fitViewport, toScreen, toWorld, zoomAt, type Viewport } from "@/lib/viewport";
 import { BoardItem } from "./BoardItem";
 import { GroupBox } from "./GroupBox";
@@ -29,6 +29,7 @@ const MIN_DIM = 24;
 const MAX_DIM = 8000;
 const MIN_GROUP_DIM = 60;
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+const GROUP_BUCKET_PADDING = 16;
 const NEW_GROUP_WIDTH = 360;
 const NEW_GROUP_HEIGHT = 240;
 
@@ -543,6 +544,36 @@ export function Board({
     [screenToBoard, setGroupsBoth, setItemsBoth, updateViewport]
   );
 
+  /**
+   * Bucket behavior: when an image lands inside a group box, the box grows to
+   * contain it (with a little clearance). Grow-only — the box never shrinks,
+   * manual resizing stays authoritative for that.
+   */
+  const settleItemIntoBucket = useCallback(
+    (item: ItemState) => {
+      const owner = topGroupContaining(groupsRef.current, item);
+      if (!owner) return;
+      const grown = expandRectToContain(owner, item, GROUP_BUCKET_PADDING);
+      const width = Math.min(MAX_DIM, grown.width);
+      const height = Math.min(MAX_DIM, grown.height);
+      if (
+        grown.x === owner.x &&
+        grown.y === owner.y &&
+        width === owner.width &&
+        height === owner.height
+      ) {
+        return;
+      }
+      setGroupsBoth(
+        groupsRef.current.map((g) =>
+          g.id === owner.id ? { ...g, x: grown.x, y: grown.y, width, height } : g
+        )
+      );
+      void patchGroup(owner.id, { x: grown.x, y: grown.y, width, height });
+    },
+    [patchGroup, setGroupsBoth]
+  );
+
   const finishDrag = useCallback(
     (e: ReactPointerEvent) => {
       const drag = dragRef.current;
@@ -554,6 +585,7 @@ export function Board({
         if (item) {
           lockedRef.current.delete(drag.id);
           void patchItem(drag.id, { x: item.x, y: item.y, z: item.z });
+          settleItemIntoBucket(item);
         }
       } else if (drag.kind === "resize") {
         const item = itemsRef.current.find((i) => i.id === drag.id);
@@ -588,7 +620,7 @@ export function Board({
         if (target) void createConnection(drag.fromId, target.id);
       }
     },
-    [createConnection, patchGroup, patchItem, screenToBoard]
+    [createConnection, patchGroup, patchItem, screenToBoard, settleItemIntoBucket]
   );
 
   /* ---------- wheel zoom (non-passive so we can preventDefault) ---------- */

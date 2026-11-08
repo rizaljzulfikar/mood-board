@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   edgeAnchors,
+  expandRectToContain,
   pointInRect,
   rectCenter,
   rectContainsItemCenter,
+  topGroupContaining,
   type Rect,
 } from "@/lib/geometry";
 
@@ -91,5 +93,67 @@ describe("edgeAnchors", () => {
     const { start, end } = edgeAnchors(a, b);
     expect(start).toEqual({ x: 50, y: 50 });
     expect(end).toEqual({ x: 50, y: 50 });
+  });
+});
+
+describe("expandRectToContain", () => {
+  it("leaves the box unchanged when the image fits with clearance", () => {
+    const group = rect(0, 0, 200, 200);
+    const item = rect(50, 50, 50, 50); // edges at 100, well inside 200
+    expect(expandRectToContain(group, item, 16)).toEqual(rect(0, 0, 200, 200));
+  });
+
+  it("grows the box when the image pokes past the padding clearance", () => {
+    const group = rect(0, 0, 100, 100);
+    const item = rect(90, 40, 40, 40); // right edge 130 + 16 padding → 146
+    expect(expandRectToContain(group, item, 16)).toEqual(rect(0, 0, 146, 100));
+  });
+
+  it("grows the box leftward and upward when the image sits past the top-left", () => {
+    const group = rect(100, 100, 100, 100); // spans 100..200 on both axes
+    const item = rect(40, 40, 30, 30); // padded to 24..86
+    expect(expandRectToContain(group, item, 16)).toEqual(rect(24, 24, 176, 176));
+  });
+
+  it("covers an image fully outside the box", () => {
+    const group = rect(0, 0, 100, 100);
+    const item = rect(300, 300, 50, 50); // padded 284..366
+    expect(expandRectToContain(group, item, 16)).toEqual(rect(0, 0, 366, 366));
+  });
+
+  it("never shrinks the box (grow-only)", () => {
+    const group = rect(0, 0, 500, 500);
+    const item = rect(10, 10, 20, 20);
+    expect(expandRectToContain(group, item, 16)).toEqual(rect(0, 0, 500, 500));
+  });
+});
+
+describe("topGroupContaining", () => {
+  const group = (id: string, x: number, y: number, z: number): Rect & { id: string; z: number } => ({
+    id,
+    x,
+    y,
+    width: 100,
+    height: 100,
+    z,
+  });
+
+  it("returns the group whose rect contains the image center", () => {
+    const a = group("a", 0, 0, 0);
+    const item = rect(40, 40, 20, 20); // center (50, 50) inside a
+    expect(topGroupContaining([a], item)?.id).toBe("a");
+  });
+
+  it("prefers the topmost z when several boxes contain the center", () => {
+    const bottom = group("bottom", 0, 0, 1);
+    const top = group("top", 0, 0, 5);
+    const item = rect(40, 40, 20, 20);
+    expect(topGroupContaining([bottom, top], item)?.id).toBe("top");
+  });
+
+  it("returns null when no box contains the image center", () => {
+    const a = group("a", 0, 0, 0);
+    const item = rect(300, 300, 20, 20);
+    expect(topGroupContaining([a], item)).toBeNull();
   });
 });
