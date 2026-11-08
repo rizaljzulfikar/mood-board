@@ -44,6 +44,21 @@ services:
       echo 'moodboard bucket ready'
       "
 
+  realtime:
+    image: node:22-alpine
+    container_name: moodboard-realtime
+    working_dir: /app
+    command: npx tsx src/realtime/server.ts
+    env_file: .env.local
+    environment:
+      REALTIME_PORT: "4000"
+    ports:
+      - "4000:4000"
+    volumes:
+      - .:/app
+    depends_on:
+      - mongo
+
 volumes:
   moodboard-mongo-data:
   moodboard-minio-data:

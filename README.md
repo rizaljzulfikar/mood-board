@@ -10,7 +10,7 @@ MongoDB container (via Mongoose).
 - MongoDB 7 (container, port **27030**) + Mongoose 8
 - MinIO (containers, API **9100**, console **9101**) + AWS SDK v3
 - Auth: bcryptjs + JWT (`jose`) in an httpOnly cookie
-- Collaboration: 2 s polling sync (item deltas + live cursors)
+- Collaboration: live WebSocket push (2 s polling fallback)
 
 ## Quickstart
 
@@ -18,6 +18,9 @@ MongoDB container (via Mongoose).
 docker compose up -d        # mongo + minio + bucket init
 npm install
 npm run dev                 # http://localhost:3000
+npm run realtime             # WebSocket hub on :4000
+# Or run the hub in Docker:
+docker compose up -d realtime
 ```
 
 `.env.local` is already provided for the local stack (see
@@ -55,6 +58,7 @@ npm run dev                 # http://localhost:3000
 | `npm run build` | production build           |
 | `npm start`     | serve production build     |
 | `npm test`      | vitest unit tests          |
+| `npm run realtime` | standalone WebSocket hub on :4000 |
 
 ## Notes
 
@@ -72,4 +76,3 @@ npm run dev                 # http://localhost:3000
 - Existing installs from before invitations: promote one account manually,
   e.g.
   `docker compose exec mongo mongosh moodboard --eval 'db.users.updateOne({ email: "you@example.com" }, { $set: { role: "superadmin" } })'`
-
