@@ -10,6 +10,7 @@ import {
   type ItemState,
 } from "@/lib/merge";
 import { edgeAnchors, expandRectToContain, pointInRect, rectContainsItemCenter, topGroupContaining } from "@/lib/geometry";
+import { extractPastePayload } from "@/lib/clipboard";
 import { fitViewport, toScreen, toWorld, zoomAt, type Viewport } from "@/lib/viewport";
 import { BoardItem } from "./BoardItem";
 import { GroupBox } from "./GroupBox";
@@ -665,6 +666,23 @@ export function Board({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [deleteConnection, deleteGroup, deleteItem, select]);
+
+  /* ---------- clipboard paste ---------- */
+
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      // Let inputs/textareas handle their own paste (labels, link dialog).
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const { files, url } = extractPastePayload(e.clipboardData);
+      if (files.length === 0 && !url) return;
+      e.preventDefault();
+      const center = centerWorld();
+      if (files.length > 0) void uploadFiles(files, center.x, center.y);
+      else void importFromUrl(url!, center.x, center.y);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [centerWorld, importFromUrl, uploadFiles]);
 
   /* ---------- collaboration sync ---------- */
 
