@@ -4,7 +4,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
 import { Project } from "@/lib/models/Project";
 import { Item } from "@/lib/models/Item";
+import { Group } from "@/lib/models/Group";
+import { Connection } from "@/lib/models/Connection";
 import { itemJSON } from "@/lib/items";
+import { groupJSON, connectionJSON } from "@/lib/groups";
 import { Board } from "@/components/Board";
 import type { ProjectInfo } from "@/components/Toolbar";
 
@@ -38,6 +41,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   }>;
 
   const items = await Item.find({ project: project._id, deletedAt: null }).sort({ z: 1 });
+  const groups = await Group.find({ project: project._id, deletedAt: null }).sort({ z: 1 });
+  const connections = await Connection.find({
+    project: project._id,
+    deletedAt: null,
+  }).sort({ createdAt: 1 });
 
   const info: ProjectInfo = {
     id,
@@ -51,6 +59,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     <Board
       projectId={id}
       initialItems={items.map(itemJSON)}
+      initialGroups={groups.map(groupJSON)}
+      initialConnections={connections.map(connectionJSON)}
       user={{ id: user.id, name: user.name }}
       project={info}
     />

@@ -3,6 +3,7 @@ import { mergeRemoteItems, type ItemState } from "@/lib/merge";
 
 function item(partial: Partial<ItemState> & { id: string }): ItemState {
   return {
+    kind: "image",
     x: 0,
     y: 0,
     width: 100,
@@ -12,6 +13,10 @@ function item(partial: Partial<ItemState> & { id: string }): ItemState {
     objectKey: `${partial.id}.png`,
     originalName: "img.png",
     mime: "image/png",
+    sourceUrl: null,
+    title: null,
+    siteName: null,
+    label: "",
     addedBy: "userA",
     updatedAt: "2026-11-07T00:00:00.000Z",
     ...partial,

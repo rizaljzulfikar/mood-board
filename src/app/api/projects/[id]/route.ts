@@ -1,6 +1,8 @@
 import { Types } from "mongoose";
 import { apiError, ApiError, json, requireMember } from "@/lib/api";
 import { Item } from "@/lib/models/Item";
+import { Group } from "@/lib/models/Group";
+import { Connection } from "@/lib/models/Connection";
 import { deleteProjectObjects } from "@/lib/storage-cleanup";
 
 export const runtime = "nodejs";
@@ -66,6 +68,8 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
 
     // Canvas items from Mongo, then image objects from MinIO (best-effort).
     await Item.deleteMany({ project: project._id });
+    await Group.deleteMany({ project: project._id });
+    await Connection.deleteMany({ project: project._id });
     try {
       await deleteProjectObjects(String(project._id));
     } catch (e) {

@@ -303,7 +303,7 @@ body {
   cursor: move;
 }
 
-.board-item img {
+.board-item > img {
   display: block;
   width: 100%;
   height: 100%;
@@ -317,6 +317,79 @@ body {
   outline-offset: 2px;
 }
 
+/* ---------- link cards (imported page/post links) ---------- */
+
+.link-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.link-card .link-thumb {
+  display: block;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  object-fit: cover;
+}
+
+.link-card .link-footer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  min-height: 52px;
+  background: #1d1d25;
+  border-top: 1px solid #2c2c36;
+  /* The card itself is click-through (drags land on .board-item);
+     the footer must stay interactive for its label input. */
+  pointer-events: auto;
+}
+
+.link-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e8e8ee;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.link-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: #8a8a98;
+}
+
+.link-site {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.link-open {
+  flex: 0 0 auto;
+  color: #8fa4ff;
+  text-decoration: none;
+  pointer-events: auto;
+}
+
+.link-open:hover {
+  text-decoration: underline;
+}
+
+.link-footer .label-input {
+  width: 100%;
+}
+
 .resize-handle {
   position: absolute;
   right: -8px;
@@ -327,6 +400,191 @@ body {
   border: 2px solid #fff;
   border-radius: 50%;
   cursor: nwse-resize;
+}
+
+/* ---------- item labels (captions under images) ---------- */
+
+.item-caption {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  max-width: 100%;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #26262f;
+  color: #b9b9c6;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: none;
+  z-index: 2;
+}
+
+.board-item:hover .item-caption,
+.board-item.selected .item-caption,
+.board-item.has-label .item-caption {
+  display: block;
+}
+
+.item-caption-text {
+  display: block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.label-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+}
+
+.label-input::placeholder {
+  color: #6e6e7c;
+}
+
+/* ---------- group boxes ---------- */
+
+.group-box {
+  position: absolute;
+  border: 1.5px solid #4a4a58;
+  border-radius: 8px;
+  background: rgb(36 36 46 / 0.35);
+  cursor: move;
+}
+
+.group-box.selected {
+  border-color: #5b7cfa;
+  background: rgb(91 124 250 / 0.07);
+}
+
+.group-label {
+  position: absolute;
+  top: -1.5px;
+  left: -1.5px;
+  max-width: calc(100% + 3px);
+  padding: 4px 10px;
+  border-radius: 7px 7px 0 0;
+  background: #26262f;
+  border-bottom: 1.5px solid #4a4a58;
+  color: #b9b9c6;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.group-box.selected .group-label {
+  background: #5b7cfa;
+  color: #101014;
+  border-bottom-color: #5b7cfa;
+}
+
+.group-label-text {
+  display: block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.group-label-input {
+  width: 200px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+  font: inherit;
+}
+
+.group-resize-handle {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  background: #5b7cfa;
+  border: 2px solid #fff;
+  border-radius: 3px;
+  cursor: nwse-resize;
+}
+
+.link-handle {
+  position: absolute;
+  right: -9px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #5b7cfa;
+  border: 2px solid #fff;
+  cursor: crosshair;
+}
+
+.link-handle::after {
+  content: "→";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* ---------- connections (lines / arrows between groups) ---------- */
+
+.connection-svg {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.connection-line {
+  fill: none;
+  stroke: #8fa4ff;
+  stroke-width: 2;
+}
+
+.connection-line.style-line {
+  stroke: #8a8a98;
+}
+
+.connection-arrowhead {
+  fill: #8fa4ff;
+}
+
+.connection.selected .connection-line {
+  stroke: #5b7cfa;
+  stroke-width: 3;
+}
+
+.connection.selected .connection-arrowhead {
+  fill: #5b7cfa;
+}
+
+.connection-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.connection-preview {
+  fill: none;
+  stroke: #5b7cfa;
+  stroke-width: 2;
+  stroke-dasharray: 6 5;
+  pointer-events: none;
 }
 
 .presence-cursor {
@@ -487,6 +745,26 @@ body {
 .share-form {
   display: flex;
   gap: 6px;
+}
+
+.link-form {
+  display: flex;
+  gap: 6px;
+}
+
+.link-form input {
+  width: 240px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid #2c2c36;
+  background: #101014;
+  color: #e8e8ee;
+  font-size: 13px;
+  outline: none;
+}
+
+.link-form input:focus {
+  border-color: #5b7cfa;
 }
 
 .share-form input {

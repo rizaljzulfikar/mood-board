@@ -3,9 +3,9 @@ import { randomInt } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { env } from "./env";
+import { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS } from "./session-cookie";
 
-export const SESSION_COOKIE = "mb_token";
-export const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 7 days
+export { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS };
 
 const BCRYPT_ROUNDS = 10;
 

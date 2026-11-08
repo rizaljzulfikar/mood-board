@@ -20,24 +20,45 @@ export function Toolbar({
   zoomPercent,
   activeUsers,
   uploading,
+  importingLink,
   onZoomIn,
   onZoomOut,
   onFit,
   onUploadClick,
+  onAddGroup,
+  onAddLink,
 }: {
   project: ProjectInfo;
   zoomPercent: number;
   activeUsers: Array<{ userId: string; name: string; color: string }>;
   uploading: boolean;
+  importingLink: boolean;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onFit: () => void;
   onUploadClick: () => void;
+  onAddGroup: () => void;
+  onAddLink: (url: string) => Promise<string | null>;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [shareError, setShareError] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
+
+  async function addLink(e: React.FormEvent) {
+    e.preventDefault();
+    const url = linkUrl.trim();
+    if (!url) return;
+    setLinkError(null);
+    const error = await onAddLink(url);
+    if (error) {
+      setLinkError(error);
+      return;
+    }
+    setLinkUrl("");
+  }
 
   async function invite(e: React.FormEvent) {
     e.preventDefault();
@@ -79,6 +100,27 @@ export function Toolbar({
         <button className="ghost-button" onClick={onFit} title="Zoom to fit">
           Fit
         </button>
+        <button className="ghost-button" onClick={onAddGroup} title="Add a labeled group box">
+          + Group
+        </button>
+        <form className="link-form" onSubmit={addLink}>
+          <input
+            type="text"
+            placeholder="Paste image or post link…"
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            title="Import an image link or a page link (e.g. an Instagram post) as a card"
+          />
+          <button
+            className="ghost-button"
+            type="submit"
+            disabled={importingLink || !linkUrl.trim()}
+            title="Import an image link or a page link (e.g. an Instagram post) as a card"
+          >
+            Add link
+          </button>
+        </form>
+        {linkError && <span className="share-error">{linkError}</span>}
         <button className="primary-button" onClick={onUploadClick} disabled={uploading}>
           {uploading ? "Uploading…" : "Upload images"}
         </button>

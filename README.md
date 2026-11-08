@@ -31,6 +31,11 @@ npm run dev                 # http://localhost:3000
 3. Drag & drop images onto the canvas (or use the upload button).
 4. Pan (drag empty space / middle mouse), zoom (wheel), move, resize
    (corner handle), delete (Del).
+5. **Groups**: “+ Group” in the toolbar adds a labeled box — double-click it to
+   rename. Images whose center is inside the box move with it. A selected
+   group shows a → handle on its right edge: drag it onto another group to
+   connect them (arrow). Click a connection to select it, Del to remove it,
+   double-click to toggle arrow ↔ plain line.
 5. Invite teammates (superadmin, on the projects page): enter a name + email —
    MoodBoard creates the account with a generated **temporary password**.
    Share it with them; they must set their own password at first login.

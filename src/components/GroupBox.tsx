@@ -1,0 +1,95 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
+import type { GroupState } from "@/lib/merge";
+
+export function GroupBox({
+  group,
+  selected,
+  editing,
+  draftLabel,
+  onGroupPointerDown,
+  onResizePointerDown,
+  onLinkPointerDown,
+  onLabelDoubleClick,
+  onLabelChange,
+  onLabelCommit,
+  onLabelCancel,
+}: {
+  group: GroupState;
+  selected: boolean;
+  editing: boolean;
+  draftLabel: string;
+  onGroupPointerDown: (e: ReactPointerEvent, group: GroupState) => void;
+  onResizePointerDown: (e: ReactPointerEvent, group: GroupState) => void;
+  onLinkPointerDown: (e: ReactPointerEvent, group: GroupState) => void;
+  onLabelDoubleClick: (group: GroupState) => void;
+  onLabelChange: (value: string) => void;
+  onLabelCommit: () => void;
+  onLabelCancel: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.select();
+  }, [editing]);
+
+  return (
+    <div
+      className={`group-box${selected ? " selected" : ""}`}
+      style={{ left: group.x, top: group.y, width: group.width, height: group.height }}
+      onPointerDown={(e) => {
+        // Never start a drag from the label input.
+        if ((e.target as HTMLElement).tagName === "INPUT") return;
+        onGroupPointerDown(e, group);
+      }}
+      onDoubleClick={(e) => {
+        if ((e.target as HTMLElement).tagName === "INPUT") return;
+        onLabelDoubleClick(group);
+      }}
+    >
+      <div className="group-label">
+        {editing ? (
+          <input
+            ref={inputRef}
+            className="group-label-input"
+            value={draftLabel}
+            placeholder="Group label"
+            onChange={(e) => onLabelChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onLabelCommit();
+              if (e.key === "Escape") onLabelCancel();
+            }}
+            onBlur={onLabelCommit}
+            maxLength={120}
+          />
+        ) : (
+          <span className="group-label-text" title="Double-click to rename">
+            {group.label || "Unnamed group"}
+          </span>
+        )}
+      </div>
+      {selected && (
+        <>
+          <div
+            className="group-resize-handle"
+            title="Resize"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onResizePointerDown(e, group);
+            }}
+          />
+          <div
+            className="link-handle"
+            title="Drag onto another group to connect"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onLinkPointerDown(e, group);
+            }}
+          />
+        </>
+      )}
+    </div>
+  );
+}
