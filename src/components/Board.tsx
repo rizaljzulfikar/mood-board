@@ -12,6 +12,16 @@ import {
 import { edgeAnchors, expandRectToContain, pointInRect, rectContainsItemCenter, topGroupContaining } from "@/lib/geometry";
 import { movedPastDragThreshold } from "@/lib/drag";
 import { extractPastePayload } from "@/lib/clipboard";
+import {
+  commitHistory,
+  initHistory,
+  planServerOps,
+  redoHistory,
+  undoHistory,
+  type HistoryStack,
+  type ServerOp,
+  type Snapshot,
+} from "@/lib/history";
 import { fitViewport, toScreen, toWorld, zoomAt, type Viewport } from "@/lib/viewport";
 import { BoardItem } from "./BoardItem";
 import { GroupBox } from "./GroupBox";
@@ -131,6 +141,66 @@ export function Board({
   const sinceRef = useRef<string | null>(null);
   const cursorRef = useRef<{ x: number; y: number } | null>(null);
 
+  /* ---------- undo / redo history ---------- */
+
+  const historyRef = useRef<HistoryStack>(
+    initHistory({ items: initialItems, groups: initialGroups, connections: initialConnections })
+  );
+  // Bumped whenever the stacks change so button disabled-states re-render.
+  const [, setHistTick] = useState(0);
+
+  const snapshotBoard = useCallback(
+    (): Snapshot => ({
+      items: itemsRef.current,
+      groups: groupsRef.current,
+      connections: connectionsRef.current,
+    }),
+    []
+  );
+
+  /** Record the current board as the newest settled state (one entry per gesture). */
+  const commitSettled = useCallback(() => {
+    historyRef.current = commitHistory(historyRef.current, snapshotBoard());
+    setHistTick((t) => t + 1);
+  }, [snapshotBoard]);
+
+  const applyServerOps = useCallback((ops: ServerOp[]) => {
+    for (const op of ops) {
+      void fetch(`/api/${op.kind}s/${op.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(op.body),
+      }).catch(() => {});
+    }
+  }, []);
+
+  const runHistory = useCallback(
+    (dir: "undo" | "redo") => {
+      if (dragRef.current || pendingRef.current) return;
+      const current = snapshotBoard();
+      const result =
+        dir === "undo" ? undoHistory(historyRef.current, current) : redoHistory(historyRef.current, current);
+      if (!result) return;
+      historyRef.current = result.stack;
+      setItemsBoth(result.target.items);
+      setGroupsBoth(result.target.groups);
+      setConnectionsBoth(result.target.connections);
+      applyServerOps(planServerOps(result.target, current));
+      const sel = selectionRef.current;
+      if (sel) {
+        const pool =
+          sel.kind === "item"
+            ? result.target.items
+            : sel.kind === "group"
+              ? result.target.groups
+              : result.target.connections;
+        if (!pool.some((entity) => entity.id === sel.id)) select(null);
+      }
+      setHistTick((t) => t + 1);
+    },
+    [applyServerOps, select, setConnectionsBoth, setGroupsBoth, setItemsBoth, snapshotBoard]
+  );
+
   const updateViewport = useCallback((v: Viewport) => {
     viewportRef.current = v;
     setViewport(v);
@@ -161,11 +231,13 @@ export function Board({
             select({ kind: "item", id: data.item.id });
           }
         }
+        // The whole batch is one undo entry.
+        commitSettled();
       } finally {
         setUploading(false);
       }
     },
-    [projectId, select, setItemsBoth]
+    [commitSettled, projectId, select, setItemsBoth]
   );
 
   const centerWorld = useCallback(() => {
@@ -195,12 +267,13 @@ export function Board({
   const deleteItem = useCallback(
     async (id: string) => {
       setItemsBoth(itemsRef.current.filter((i) => i.id !== id));
+      commitSettled();
       if (selectionRef.current?.kind === "item" && selectionRef.current.id === id) {
         select(null);
       }
       await fetch(`/api/items/${id}`, { method: "DELETE" });
     },
-    [select, setItemsBoth]
+    [commitSettled, select, setItemsBoth]
   );
 
   const patchGroup = useCallback(
@@ -229,22 +302,24 @@ export function Board({
       // Images stay on the canvas; only the box and its connections go away.
       setGroupsBoth(groupsRef.current.filter((g) => g.id !== id));
       setConnectionsBoth(connectionsRef.current.filter((c) => c.from !== id && c.to !== id));
+      commitSettled();
       if (selectionRef.current?.id === id) select(null);
       if (labelEdit?.id === id) setLabelEdit(null);
       await fetch(`/api/groups/${id}`, { method: "DELETE" });
     },
-    [labelEdit?.id, select, setConnectionsBoth, setGroupsBoth]
+    [commitSettled, labelEdit?.id, select, setConnectionsBoth, setGroupsBoth]
   );
 
   const deleteConnection = useCallback(
     async (id: string) => {
       setConnectionsBoth(connectionsRef.current.filter((c) => c.id !== id));
+      commitSettled();
       if (selectionRef.current?.kind === "connection" && selectionRef.current.id === id) {
         select(null);
       }
       await fetch(`/api/connections/${id}`, { method: "DELETE" });
     },
-    [select, setConnectionsBoth]
+    [commitSettled, select, setConnectionsBoth]
   );
 
   const toggleConnectionStyle = useCallback(
@@ -255,13 +330,14 @@ export function Board({
       setConnectionsBoth(
         connectionsRef.current.map((c) => (c.id === id ? { ...c, style } : c))
       );
+      commitSettled();
       await fetch(`/api/connections/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ style }),
       });
     },
-    [setConnectionsBoth]
+    [commitSettled, setConnectionsBoth]
   );
 
   const createConnection = useCallback(
@@ -274,8 +350,9 @@ export function Board({
       if (!res.ok) return;
       const data = (await res.json()) as { connection: ConnectionState };
       setConnectionsBoth([...connectionsRef.current, data.connection]);
+      commitSettled();
     },
-    [projectId, setConnectionsBoth]
+    [commitSettled, projectId, setConnectionsBoth]
   );
 
   const addGroup = useCallback(async () => {
@@ -293,9 +370,10 @@ export function Board({
     if (!res.ok) return;
     const data = (await res.json()) as { group: GroupState };
     setGroupsBoth([...groupsRef.current, data.group]);
+    commitSettled();
     select({ kind: "group", id: data.group.id });
     setLabelEdit({ id: data.group.id, draft: "", target: "group" });
-  }, [centerWorld, projectId, select, setGroupsBoth]);
+  }, [centerWorld, commitSettled, projectId, select, setGroupsBoth]);
 
   /* ---------- link import ---------- */
 
@@ -314,6 +392,7 @@ export function Board({
         }
         const data = (await res.json()) as { item: ItemState };
         setItemsBoth([...itemsRef.current, data.item]);
+        commitSettled();
         select({ kind: "item", id: data.item.id });
         return null;
       } catch {
@@ -322,7 +401,7 @@ export function Board({
         setImportingLink(false);
       }
     },
-    [projectId, select, setItemsBoth]
+    [commitSettled, projectId, select, setItemsBoth]
   );
 
   /* ---------- label editing (groups and items) ---------- */
@@ -338,6 +417,7 @@ export function Board({
       if (!group) return;
       if (label === group.label) return;
       setGroupsBoth(groupsRef.current.map((g) => (g.id === id ? { ...g, label } : g)));
+      commitSettled();
       void fetch(`/api/groups/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -350,12 +430,13 @@ export function Board({
     if (!item) return;
     if (label === item.label) return;
     setItemsBoth(itemsRef.current.map((i) => (i.id === id ? { ...i, label } : i)));
+    commitSettled();
     void fetch(`/api/items/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label }),
     });
-  }, [labelEdit, setGroupsBoth, setItemsBoth]);
+  }, [commitSettled, labelEdit, setGroupsBoth, setItemsBoth]);
 
   const startItemLabelEdit = useCallback((item: ItemState) => {
     setLabelEdit({ id: item.id, draft: item.label, target: "item" });
@@ -722,8 +803,14 @@ export function Board({
         );
         if (target) void createConnection(drag.fromId, target.id);
       }
+
+      // One history entry per gesture. Connection drags commit inside
+      // createConnection; pans and clicks never touch board content.
+      if (drag.kind !== "connect" && drag.kind !== "pan") {
+        commitSettled();
+      }
     },
-    [createConnection, patchGroup, patchItem, screenToBoard, settleItemIntoBucket]
+    [commitSettled, createConnection, patchGroup, patchItem, screenToBoard, settleItemIntoBucket]
   );
 
   /* ---------- wheel zoom (non-passive so we can preventDefault) ---------- */
@@ -758,10 +845,18 @@ export function Board({
         else if (sel.kind === "group") void deleteGroup(sel.id);
         else void deleteConnection(sel.id);
       }
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        runHistory(e.shiftKey ? "redo" : "undo");
+      } else if (mod && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        runHistory("redo");
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [deleteConnection, deleteGroup, deleteItem, select]);
+  }, [deleteConnection, deleteGroup, deleteItem, runHistory, select]);
 
   /* ---------- clipboard paste ---------- */
 
@@ -857,6 +952,8 @@ export function Board({
   };
 
   const v = viewport;
+  const canUndo = historyRef.current.past.length > 0;
+  const canRedo = historyRef.current.future.length > 0;
   const sortedItems = [...items].sort((a, b) => a.z - b.z);
   const sortedGroups = [...groups].sort((a, b) => a.z - b.z);
   const groupsById = new Map(groups.map((g) => [g.id, g]));
