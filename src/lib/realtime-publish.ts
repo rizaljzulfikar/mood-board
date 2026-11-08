@@ -77,6 +77,14 @@ export function broadcastDelete(projectId: string, kind: EntityKind, id: string)
   }
 }
 
+export function broadcastProjectDeleted(projectId: string): void {
+  try {
+    transport({ type: "publish", projectId, event: { type: "project:deleted" } });
+  } catch {
+    // The hub is best-effort: never fail the mutation that triggered this.
+  }
+}
+
 export function setPublishTransportForTest(fn: ((msg: PublishMessage) => void) | null): void {
   transport = fn ?? defaultTransport;
 }

@@ -26,6 +26,13 @@ export async function startHub(options: HubOptions): Promise<Server> {
   const verifyTicket = options.verifyTicket ?? ((ticket: string) => verifyRoomTicket(ticket, options.secret));
 
   wss.on("connection", (socket, req) => {
+    socket.on("error", () => {
+      try {
+        socket.terminate();
+      } catch {
+        // Error handling must never become an additional hub failure.
+      }
+    });
     void handleConnection(socket, req, options.secret, registry, verifyTicket);
   });
 

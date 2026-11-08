@@ -17,6 +17,7 @@ export type PresenceUser = {
 };
 
 export type ServerMessage =
+  | { type: "project:deleted" }
   | { type: "presence:snapshot"; users: PresenceUser[] }
   | { type: "presence:join"; user: PresenceUser }
   | { type: "presence:leave"; userId: string }

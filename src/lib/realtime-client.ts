@@ -13,6 +13,14 @@ export type BoardState = {
   connections: ConnectionState[];
 };
 
+export function presenceFromHttp(
+  currentUsers: PresenceUser[],
+  httpUsers: PresenceUser[],
+  wsOpen: boolean
+): PresenceUser[] {
+  return wsOpen ? currentUsers : httpUsers;
+}
+
 export function applyRealtimeEvent(
   state: BoardState,
   event: ServerMessage,
@@ -34,6 +42,8 @@ export function applyRealtimeEvent(
       };
     case "connection:delete":
       return { ...state, connections: mergeRemoteEntities(state.connections, [], [event.id], locked) };
+    case "project:deleted":
+      return state;
     default:
       return state;
   }

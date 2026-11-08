@@ -9,7 +9,7 @@ import {
   type GroupState,
   type ItemState,
 } from "@/lib/merge";
-import { applyPresenceEvent, applyRealtimeEvent } from "@/lib/realtime-client";
+import { applyPresenceEvent, applyRealtimeEvent, presenceFromHttp } from "@/lib/realtime-client";
 import type { PresenceUser, ServerMessage } from "@/lib/realtime-protocol";
 import { edgeAnchors, expandRectToContain, pointInRect, rectContainsItemCenter, topGroupContaining } from "@/lib/geometry";
 import { movedPastDragThreshold } from "@/lib/drag";
@@ -953,7 +953,7 @@ export function Board({
     }) => {
       if (stopped) return;
       sinceRef.current = data.now;
-      setUsers(data.users);
+      setUsers((current) => presenceFromHttp(current, data.users, socket?.readyState === WebSocket.OPEN));
       const locked = [...lockedRef.current];
       setItemsBoth(mergeRemoteItems(itemsRef.current, data.items, data.deletedIds, locked));
       setGroupsBoth(
@@ -1030,6 +1030,10 @@ export function Board({
           }
           if (message.type.startsWith("presence:")) {
             setUsers((current) => applyPresenceEvent(current, message, user.id));
+            return;
+          }
+          if (message.type === "project:deleted") {
+            window.location.assign("/projects");
             return;
           }
           const next = applyRealtimeEvent(

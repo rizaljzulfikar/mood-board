@@ -48,7 +48,8 @@ docker compose up -d realtime
    accounts are invite-only. Logged-in users can also change their own
    password anytime via the header link.
 7. Share a project: paste a teammate's email in the toolbar to add them —
-   their cursor and edits appear within ~2 seconds.
+   their cursor and edits appear immediately over WebSockets; the 2-second poll
+   is used only as a reconnect/fallback path.
 
 ## Scripts
 
@@ -63,8 +64,9 @@ docker compose up -d realtime
 ## Notes
 
 - All API JSON uses `id` for document identifiers (not Mongo's `_id`).
-- Items are soft-deleted so other clients learn about removals on their next
-  2-second sync; project deletion hard-deletes items and their MinIO objects.
+- Items are soft-deleted and changes are pushed immediately over WebSockets;
+  the 2-second sync is a reconnect/fallback path. Project deletion hard-deletes
+  items and their MinIO objects.
 - Sessions are cookie-based (`mb_token`, httpOnly, SameSite=Lax). The app is
   designed for local/plain-HTTP self-hosting; `secure: false` is deliberate.
 - Accounts are invite-only. The superadmin is created through `/setup` while

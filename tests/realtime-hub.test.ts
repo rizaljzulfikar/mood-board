@@ -88,6 +88,26 @@ describe("realtime hub", () => {
     a.close(); b.close(); pub.close();
   });
 
+  it("cleans up terminated clients and omits them from later presence snapshots", async () => {
+    server = await startHub({ port: 0, secret: SECRET });
+    const port = portOf(server);
+    const a = new WebSocket(`ws://localhost:${port}?ticket=${await signRoomTicket("p1", "u1", "A", 60_000)}`);
+    const b = new WebSocket(`ws://localhost:${port}?ticket=${await signRoomTicket("p1", "u2", "B", 60_000)}`);
+    await next(a);
+    await next(b);
+
+    const left = next(b);
+    a.terminate();
+    expect(await left).toEqual({ type: "presence:leave", userId: "u1" });
+
+    const c = new WebSocket(`ws://localhost:${port}?ticket=${await signRoomTicket("p1", "u3", "C", 60_000)}`);
+    const snapshot = await next(c);
+    expect(snapshot.type).toBe("presence:snapshot");
+    expect(snapshot.users.map((user: { userId: string }) => user.userId)).not.toContain("u1");
+    b.close();
+    c.close();
+  });
+
   it("serves /health", async () => {
     server = await startHub({ port: 0, secret: SECRET });
     const res = await fetch(`http://localhost:${portOf(server)}/health`);

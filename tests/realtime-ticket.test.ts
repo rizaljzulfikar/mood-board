@@ -22,7 +22,10 @@ describe("room tickets", () => {
   });
   it("rejects a tampered ticket", async () => {
     const t = await signRoomTicket("p1", "u1", "Alice", 60_000);
-    expect(await verifyRoomTicket(t.slice(0, -2) + "xx", SECRET)).toBeNull();
+    const [header, payload, signature] = t.split(".");
+    const last = payload.at(-1);
+    const tamperedPayload = payload.slice(0, -1) + (last === "a" ? "b" : "a");
+    expect(await verifyRoomTicket(`${header}.${tamperedPayload}.${signature}`, SECRET)).toBeNull();
   });
   it("rejects a ticket signed with another secret", async () => {
     const t = await signRoomTicket("p1", "u1", "Alice", 60_000);

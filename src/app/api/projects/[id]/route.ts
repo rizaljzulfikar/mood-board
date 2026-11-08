@@ -4,6 +4,7 @@ import { Item } from "@/lib/models/Item";
 import { Group } from "@/lib/models/Group";
 import { Connection } from "@/lib/models/Connection";
 import { deleteProjectObjects } from "@/lib/storage-cleanup";
+import { broadcastProjectDeleted } from "@/lib/realtime-publish";
 
 export const runtime = "nodejs";
 
@@ -77,6 +78,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     }
 
     await project.deleteOne();
+    broadcastProjectDeleted(String(project._id));
     return json({ ok: true });
   } catch (e) {
     return apiError(e);
