@@ -13,6 +13,8 @@ export default defineConfig({
     fileParallelism: false,
     env: {
       JWT_SECRET: "test-secret-0123456789abcdef-test-secret",
+      REALTIME_SECRET: "test-realtime-secret",
+      REALTIME_URL: "ws://localhost:4999",
       MONGODB_URI: "mongodb://localhost:27030/moodboard",
       MINIO_ENDPOINT: "http://localhost:9100",
       MINIO_ACCESS_KEY: "moodboard",
