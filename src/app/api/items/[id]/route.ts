@@ -17,11 +17,22 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     // connection would time out as a 500.
     await connectDB();
     if (!Types.ObjectId.isValid(id)) throw new ApiError(404, "Item not found");
+    const body = (await req.json()) as Record<string, unknown>;
     const item = await Item.findById(id);
-    if (!item || item.deletedAt) throw new ApiError(404, "Item not found");
+    if (!item) throw new ApiError(404, "Item not found");
     await requireMember(String(item.project));
 
-    const body = (await req.json()) as Record<string, unknown>;
+    // Undo/redo reconcile: `deleted: true` re-deletes a live item,
+    // `deleted: false` un-deletes one (optionally with field updates).
+    if (body.deleted === true) {
+      if (item.deletedAt) throw new ApiError(404, "Item not found");
+      item.deletedAt = new Date();
+      await item.save();
+      return json({ item: itemJSON(item) });
+    }
+    if (item.deletedAt && body.deleted !== false) throw new ApiError(404, "Item not found");
+    if (body.deleted === false) item.deletedAt = null;
+
     const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
     const x = num(body.x);
     const y = num(body.y);

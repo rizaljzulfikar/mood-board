@@ -14,11 +14,21 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     // connection would time out as a 500.
     await connectDB();
     if (!Types.ObjectId.isValid(id)) throw new ApiError(404, "Group not found");
+    const body = (await req.json()) as Record<string, unknown>;
     const group = await Group.findById(id);
-    if (!group || group.deletedAt) throw new ApiError(404, "Group not found");
+    if (!group) throw new ApiError(404, "Group not found");
     await requireMember(String(group.project));
 
-    const body = (await req.json()) as Record<string, unknown>;
+    // Undo/redo reconcile: `deleted: true` re-deletes a live group,
+    // `deleted: false` un-deletes one (optionally with field updates).
+    if (body.deleted === true) {
+      if (group.deletedAt) throw new ApiError(404, "Group not found");
+      group.deletedAt = new Date();
+      await group.save();
+      return json({ group: groupJSON(group) });
+    }
+    if (group.deletedAt && body.deleted !== false) throw new ApiError(404, "Group not found");
+    if (body.deleted === false) group.deletedAt = null;
 
     const label = cleanLabel(body.label);
     if (label !== undefined) group.label = label;

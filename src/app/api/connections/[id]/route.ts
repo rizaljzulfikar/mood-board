@@ -11,11 +11,23 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const { id } = await ctx.params;
     await connectDB();
     if (!Types.ObjectId.isValid(id)) throw new ApiError(404, "Connection not found");
+    const body = (await req.json()) as Record<string, unknown>;
     const connection = await Connection.findById(id);
-    if (!connection || connection.deletedAt) throw new ApiError(404, "Connection not found");
+    if (!connection) throw new ApiError(404, "Connection not found");
     await requireMember(String(connection.project));
 
-    const body = (await req.json()) as Record<string, unknown>;
+    // Undo/redo reconcile: `deleted: true` re-deletes a live connection,
+    // `deleted: false` un-deletes one (optionally with a style update).
+    if (body.deleted === true) {
+      if (connection.deletedAt) throw new ApiError(404, "Connection not found");
+      connection.deletedAt = new Date();
+      await connection.save();
+      return json({ connection: connectionJSON(connection) });
+    }
+    if (connection.deletedAt && body.deleted !== false) {
+      throw new ApiError(404, "Connection not found");
+    }
+    if (body.deleted === false) connection.deletedAt = null;
     if (body.style === "arrow" || body.style === "line") {
       connection.style = body.style satisfies ConnectionStyle;
     }
