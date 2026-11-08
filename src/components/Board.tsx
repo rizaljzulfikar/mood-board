@@ -9,6 +9,8 @@ import {
   type GroupState,
   type ItemState,
 } from "@/lib/merge";
+import { applyPresenceEvent, applyRealtimeEvent } from "@/lib/realtime-client";
+import type { PresenceUser, ServerMessage } from "@/lib/realtime-protocol";
 import { edgeAnchors, expandRectToContain, pointInRect, rectContainsItemCenter, topGroupContaining } from "@/lib/geometry";
 import { movedPastDragThreshold } from "@/lib/drag";
 import { extractPastePayload } from "@/lib/clipboard";
@@ -32,14 +34,9 @@ import { Toolbar, type ProjectInfo } from "./Toolbar";
 import { ActionBar } from "./ActionBar";
 import { ZoomControls } from "./ZoomControls";
 
-type PresenceUser = {
-  userId: string;
-  name: string;
-  color: string;
-  cursor: { x: number; y: number } | null;
-};
-
 const SYNC_INTERVAL_MS = 2000;
+const REALTIME_URL = process.env.NEXT_PUBLIC_REALTIME_URL;
+const CURSOR_THROTTLE_MS = 50;
 const ZOOM_STEP = 1.1;
 const MIN_DIM = 24;
 const MAX_DIM = 8000;
@@ -142,6 +139,18 @@ export function Board({
   const lockedRef = useRef<Set<string>>(new Set());
   const sinceRef = useRef<string | null>(null);
   const cursorRef = useRef<{ x: number; y: number } | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const lastCursorSentRef = useRef(0);
+
+  const sendCursor = useCallback((cursor: { x: number; y: number }) => {
+    const socket = socketRef.current;
+    const now = Date.now();
+    if (!socket || socket.readyState !== WebSocket.OPEN || now - lastCursorSentRef.current < CURSOR_THROTTLE_MS) {
+      return;
+    }
+    lastCursorSentRef.current = now;
+    socket.send(JSON.stringify({ type: "cursor", cursor }));
+  }, []);
 
   /* ---------- undo / redo history ---------- */
 
@@ -655,7 +664,9 @@ export function Board({
       // keep their normal DOM target (inline label editing relies on it).
       const pending = pendingRef.current;
       if (pending && !dragRef.current) {
-        cursorRef.current = toWorld(board.x, board.y, viewportRef.current);
+        const world = toWorld(board.x, board.y, viewportRef.current);
+        cursorRef.current = world;
+        sendCursor(world);
         if (e.buttons === 0) {
           // Released before it ever became a drag.
           pendingRef.current = null;
@@ -684,6 +695,7 @@ export function Board({
       if (!drag) {
         const world = toWorld(board.x, board.y, viewportRef.current);
         cursorRef.current = world;
+        sendCursor(world);
         return;
       }
 
@@ -745,7 +757,7 @@ export function Board({
         setConnectPoint(world);
       }
     },
-    [screenToBoard, setGroupsBoth, setItemsBoth, updateViewport]
+    [screenToBoard, sendCursor, setGroupsBoth, setItemsBoth, updateViewport]
   );
 
   /**
@@ -921,7 +933,40 @@ export function Board({
 
   useEffect(() => {
     let stopped = false;
-    const tick = async () => {
+    let socket: WebSocket | null = null;
+    let fallbackInterval: ReturnType<typeof setInterval> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectDelay = 500;
+
+    const applySync = (data: {
+      items: ItemState[];
+      deletedIds: string[];
+      groups?: GroupState[];
+      deletedGroupIds?: string[];
+      connections?: ConnectionState[];
+      deletedConnectionIds?: string[];
+      users: PresenceUser[];
+      now: string;
+    }) => {
+      if (stopped) return;
+      sinceRef.current = data.now;
+      setUsers(data.users);
+      const locked = [...lockedRef.current];
+      setItemsBoth(mergeRemoteItems(itemsRef.current, data.items, data.deletedIds, locked));
+      setGroupsBoth(
+        mergeRemoteEntities(groupsRef.current, data.groups ?? [], data.deletedGroupIds ?? [], locked)
+      );
+      setConnectionsBoth(
+        mergeRemoteEntities(
+          connectionsRef.current,
+          data.connections ?? [],
+          data.deletedConnectionIds ?? [],
+          []
+        )
+      );
+    };
+
+    const poll = async () => {
       try {
         const res = await fetch(`/api/projects/${projectId}/sync`, {
           method: "POST",
@@ -929,49 +974,90 @@ export function Board({
           body: JSON.stringify({ since: sinceRef.current, cursor: cursorRef.current }),
         });
         if (!res.ok || stopped) return;
-        const data = (await res.json()) as {
-          items: ItemState[];
-          deletedIds: string[];
-          groups?: GroupState[];
-          deletedGroupIds?: string[];
-          connections?: ConnectionState[];
-          deletedConnectionIds?: string[];
-          users: PresenceUser[];
-          now: string;
-        };
-        sinceRef.current = data.now;
-        setUsers(data.users);
-        const locked = [...lockedRef.current];
-        setItemsBoth(
-          mergeRemoteItems(itemsRef.current, data.items, data.deletedIds, locked)
-        );
-        setGroupsBoth(
-          mergeRemoteEntities(
-            groupsRef.current,
-            data.groups ?? [],
-            data.deletedGroupIds ?? [],
-            locked
-          )
-        );
-        setConnectionsBoth(
-          mergeRemoteEntities(
-            connectionsRef.current,
-            data.connections ?? [],
-            data.deletedConnectionIds ?? [],
-            []
-          )
-        );
+        applySync((await res.json()) as Parameters<typeof applySync>[0]);
       } catch {
         /* transient network error — next tick retries */
       }
     };
-    void tick();
-    const interval = setInterval(tick, SYNC_INTERVAL_MS);
+
+    const startFallback = () => {
+      if (fallbackInterval === null) fallbackInterval = setInterval(poll, SYNC_INTERVAL_MS);
+    };
+    const connect = async () => {
+      if (stopped || !REALTIME_URL) return;
+      try {
+        const res = await fetch(`/api/projects/${projectId}/realtime-ticket`);
+        if (!res.ok || stopped) throw new Error("realtime ticket request failed");
+        const { ticket } = (await res.json()) as { ticket: string };
+        if (stopped) return;
+        const ws = new WebSocket(`${REALTIME_URL}?ticket=${encodeURIComponent(ticket)}`);
+        socket = ws;
+        socketRef.current = ws;
+        ws.onopen = () => {
+          reconnectDelay = 500;
+          if (fallbackInterval !== null) {
+            clearInterval(fallbackInterval);
+            fallbackInterval = null;
+          }
+          void poll();
+        };
+        ws.onmessage = (event) => {
+          if (stopped) return;
+          let message: ServerMessage;
+          try {
+            message = JSON.parse(event.data as string) as ServerMessage;
+          } catch {
+            return;
+          }
+          if (message.type.startsWith("presence:")) {
+            setUsers((current) => applyPresenceEvent(current, message, user.id));
+            return;
+          }
+          const next = applyRealtimeEvent(
+            { items: itemsRef.current, groups: groupsRef.current, connections: connectionsRef.current },
+            message,
+            [...lockedRef.current]
+          );
+          setItemsBoth(next.items);
+          setGroupsBoth(next.groups);
+          setConnectionsBoth(next.connections);
+        };
+        ws.onerror = () => ws.close();
+        ws.onclose = () => {
+          if (socketRef.current === ws) socketRef.current = null;
+          if (stopped) return;
+          startFallback();
+          if (reconnectTimer === null) {
+            reconnectTimer = setTimeout(() => {
+              reconnectTimer = null;
+              reconnectDelay = Math.min(reconnectDelay * 2, 10_000);
+              void connect();
+            }, reconnectDelay);
+          }
+        };
+      } catch {
+        startFallback();
+        if (!stopped && reconnectTimer === null) {
+          reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            reconnectDelay = Math.min(reconnectDelay * 2, 10_000);
+            void connect();
+          }, reconnectDelay);
+        }
+      }
+    };
+
+    void poll();
+    if (REALTIME_URL) void connect();
+    else startFallback();
     return () => {
       stopped = true;
-      clearInterval(interval);
+      if (fallbackInterval !== null) clearInterval(fallbackInterval);
+      if (reconnectTimer !== null) clearTimeout(reconnectTimer);
+      socketRef.current?.close();
+      socket = null;
     };
-  }, [projectId, setConnectionsBoth, setGroupsBoth, setItemsBoth]);
+  }, [projectId, setConnectionsBoth, setGroupsBoth, setItemsBoth, user.id]);
 
   /* ---------- render ---------- */
 
