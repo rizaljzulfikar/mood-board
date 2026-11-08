@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
 import { Project } from "@/lib/models/Project";
 import { CreateProjectForm } from "@/components/CreateProjectForm";
+import { InviteUserForm } from "@/components/InviteUserForm";
 import { LogoutButton } from "@/components/LogoutButton";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,8 @@ export default async function ProjectsPage() {
       </header>
 
       <CreateProjectForm />
+
+      {user.role === "superadmin" && <InviteUserForm />}
 
       {projects.length === 0 ? (
         <p className="projects-empty">

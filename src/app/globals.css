@@ -181,6 +181,55 @@ body {
   cursor: default;
 }
 
+.invite-user {
+  margin-bottom: 28px;
+  padding: 16px 18px;
+  background: #17171d;
+  border: 1px solid #26262e;
+  border-radius: 10px;
+}
+
+.invite-user h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.invite-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #a0a0ae;
+}
+
+.invite-user .create-project {
+  margin-bottom: 0;
+}
+
+.invite-result {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid #5b7cfa;
+  border-radius: 8px;
+  background: #14161f;
+}
+
+.invite-result p {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.invite-password {
+  display: inline-block;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #101014;
+  border: 1px solid #2c2c36;
+  font-family: monospace;
+  font-size: 16px;
+  letter-spacing: 1px;
+  color: #8fa4ff;
+  user-select: all;
+}
+
 .project-list {
   list-style: none;
   margin: 0;
