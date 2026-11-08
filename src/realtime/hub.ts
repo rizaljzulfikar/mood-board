@@ -23,8 +23,17 @@ export async function startHub(options: { port: number; secret: string }): Promi
   });
 
   await new Promise<void>((resolve, reject) => {
-    http.once("error", reject);
-    http.listen(options.port, resolve);
+    const onListening = () => {
+      http.removeListener("error", onError);
+      resolve();
+    };
+    const onError = (error: Error) => {
+      http.removeListener("listening", onListening);
+      reject(error);
+    };
+    http.once("listening", onListening);
+    http.once("error", onError);
+    http.listen(options.port);
   });
   return http;
 }
@@ -57,7 +66,7 @@ async function handleConnection(
       return;
     }
     const claims = await verifyRoomTicket(ticket, secret);
-    if (!claims) {
+    if (!claims || socket.readyState !== WebSocket.OPEN) {
       socket.close(4001);
       return;
     }
@@ -73,7 +82,23 @@ async function handleConnection(
       },
     };
     const { firstForUser } = registry.add(client);
-    socket.send(JSON.stringify({ type: "presence:snapshot", users: registry.snapshot(claims.projectId) }));
+    let registered = true;
+    const cleanup = () => {
+      if (!registered) return;
+      registered = false;
+      const result = registry.remove(id);
+      if (result?.lastForUser) {
+        registry.broadcast(result.projectId, { type: "presence:leave", userId: result.userId });
+      }
+    };
+    socket.once("close", cleanup);
+    try {
+      socket.send(JSON.stringify({ type: "presence:snapshot", users: registry.snapshot(claims.projectId) }));
+    } catch {
+      cleanup();
+      socket.close(1011);
+      return;
+    }
     if (firstForUser) {
       const user = registry.snapshot(claims.projectId).find((entry) => entry.userId === claims.userId);
       if (user) registry.broadcast(claims.projectId, { type: "presence:join", user }, id);
@@ -97,12 +122,6 @@ async function handleConnection(
         }
       } catch {
         // Ignore malformed browser messages.
-      }
-    });
-    socket.on("close", () => {
-      const result = registry.remove(id);
-      if (result?.lastForUser) {
-        registry.broadcast(result.projectId, { type: "presence:leave", userId: result.userId });
       }
     });
   } catch {

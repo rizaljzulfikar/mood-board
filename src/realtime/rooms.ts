@@ -6,8 +6,8 @@
  * stays present until their last socket closes.
  */
 
-import { presenceColor } from "@/lib/presence";
-import type { Cursor, PresenceUser, ServerMessage } from "@/lib/realtime-protocol";
+import { presenceColor } from "../lib/presence";
+import type { Cursor, PresenceUser, ServerMessage } from "../lib/realtime-protocol";
 
 export type RoomClient = {
   id: string;

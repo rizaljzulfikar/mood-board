@@ -34,6 +34,25 @@ describe("realtime hub", () => {
     good.close();
   });
 
+  it("does not retain a socket closed during ticket verification", async () => {
+    server = await startHub({ port: 0, secret: SECRET });
+    const port = portOf(server);
+    const ticket = await signRoomTicket("p1", "closed-user", "Closed", 60_000);
+    const closed = new WebSocket(`ws://localhost:${port}?ticket=${ticket}`);
+    closed.on("error", () => undefined);
+    const closedEvent = new Promise<void>((resolve) => closed.once("close", () => resolve()));
+    closed.close();
+    await closedEvent;
+
+    const good = new WebSocket(
+      `ws://localhost:${port}?ticket=${await signRoomTicket("p1", "live-user", "Live", 60_000)}`
+    );
+    const msg = await next(good);
+    expect(msg.users).toEqual(expect.arrayContaining([expect.objectContaining({ userId: "live-user" })]));
+    expect(msg.users).not.toEqual(expect.arrayContaining([expect.objectContaining({ userId: "closed-user" })]));
+    good.close();
+  });
+
   it("broadcasts a published event to the room", async () => {
     server = await startHub({ port: 0, secret: SECRET });
     const port = portOf(server);
