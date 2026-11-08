@@ -4,13 +4,14 @@ import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 
 export const dynamic = "force-dynamic";
 
+/** Serves both flows: the forced first-login rotation and the voluntary
+ * "change my password" entry from the header links. */
 export default async function ChangePasswordPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!user.mustChangePassword) redirect("/projects");
   return (
     <main className="auth-page">
-      <ChangePasswordForm />
+      <ChangePasswordForm mustChangePassword={user.mustChangePassword} />
     </main>
   );
 }

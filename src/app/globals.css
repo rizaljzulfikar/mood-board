@@ -104,6 +104,21 @@ body {
   color: #8fa4ff;
 }
 
+.auth-card .auth-cancel {
+  align-self: center;
+  margin-top: 0;
+  padding: 4px 8px;
+  border: none;
+  color: #a0a0ae;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.auth-card .auth-cancel:hover {
+  border: none;
+  color: #e8e8ee;
+}
+
 .projects-page {
   max-width: 720px;
   margin: 0 auto;

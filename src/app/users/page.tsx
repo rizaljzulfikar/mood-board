@@ -25,6 +25,9 @@ export default async function UsersPage() {
           <Link href="/projects" className="ghost-button">
             Projects
           </Link>
+          <Link href="/change-password" className="ghost-button">
+            Change password
+          </Link>
           <LogoutButton />
         </div>
       </header>

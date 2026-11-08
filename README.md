@@ -42,7 +42,8 @@ npm run dev                 # http://localhost:3000
    transfer to you, and they are removed from every project. MoodBoard creates
    accounts with a generated **temporary password**; share it with them; they
    must set their own password at first login. There is no registration page —
-   accounts are invite-only.
+   accounts are invite-only. Logged-in users can also change their own
+   password anytime via the header link.
 7. Share a project: paste a teammate's email in the toolbar to add them —
    their cursor and edits appear within ~2 seconds.
 

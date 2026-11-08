@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-export function ChangePasswordForm() {
+export function ChangePasswordForm({ mustChangePassword }: { mustChangePassword: boolean }) {
   const router = useRouter();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -41,13 +42,15 @@ export function ChangePasswordForm() {
 
   return (
     <form className="auth-card" onSubmit={onSubmit}>
-      <h1>Set a new password</h1>
+      <h1>{mustChangePassword ? "Set a new password" : "Change password"}</h1>
       <p className="auth-alt">
-        You signed in with a temporary password. Choose a new one to continue.
+        {mustChangePassword
+          ? "You signed in with a temporary password. Choose a new one to continue."
+          : "Enter your current password and choose a new one."}
       </p>
 
       <label>
-        Current (temporary) password
+        {mustChangePassword ? "Current (temporary) password" : "Current password"}
         <input
           type="password"
           required
@@ -85,8 +88,14 @@ export function ChangePasswordForm() {
       {error && <p className="auth-error">{error}</p>}
 
       <button type="submit" disabled={pending}>
-        {pending ? "…" : "Save new password"}
+        {pending ? "…" : mustChangePassword ? "Save new password" : "Change password"}
       </button>
+
+      {!mustChangePassword && (
+        <Link href="/projects" className="ghost-button auth-cancel">
+          Back to projects
+        </Link>
+      )}
     </form>
   );
 }

@@ -107,6 +107,33 @@ describe("forced temp-password rotation", () => {
     expect(await verifyPassword(TEMP, fresh!.passwordHash)).toBe(false);
   });
 
+  it("lets a logged-in user rotate their password voluntarily", async () => {
+    const user = await User.create({
+      email: "voluntary@test.local",
+      name: "Voluntary",
+      passwordHash: await hashPassword(TEMP),
+      role: "user",
+      mustChangePassword: false,
+    });
+    vi.mocked(getCurrentUser).mockResolvedValue({
+      id: String(user._id),
+      email: user.email,
+      name: user.name,
+      role: "user",
+      mustChangePassword: false,
+    });
+
+    const res = await postJson("/api/auth/change-password", CHANGE, {
+      currentPassword: TEMP,
+      newPassword: NEW,
+    });
+    expect(res.status).toBe(200);
+
+    const fresh = await User.findById(user._id);
+    expect(fresh!.mustChangePassword).toBe(false);
+    expect(await verifyPassword(NEW, fresh!.passwordHash)).toBe(true);
+  });
+
   it("rejects a wrong current password with 400", async () => {
     const user = await User.create({
       email: "wrong@test.local",

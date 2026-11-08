@@ -23,6 +23,9 @@ export default async function ProjectsPage() {
         <h1>MoodBoard</h1>
         <div className="projects-user">
           <span>{user.name}</span>
+          <Link href="/change-password" className="ghost-button">
+            Change password
+          </Link>
           {user.role === "superadmin" && (
             <Link href="/users" className="ghost-button">
               Users

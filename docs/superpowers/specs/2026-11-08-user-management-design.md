@@ -70,3 +70,10 @@ user-management page with password reset.
 ## Left to the builder
 
 - Exact row layout and copy (reuse project-card / invite-result styling).
+
+## Follow-up (same day)
+
+- Voluntary password change: `/change-password` now serves both flows — the
+  forced first-login rotation and self-service change from the header link
+  ("Change password" in the projects/users headers). Same API; the form
+  adapts copy and shows a "Back to projects" escape only in voluntary mode.
