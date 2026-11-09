@@ -5,7 +5,7 @@
  */
 export type ItemState = {
   id: string;
-  kind: "image" | "link";
+  kind: "image" | "link" | "note";
   x: number;
   y: number;
   width: number;
@@ -21,6 +21,9 @@ export type ItemState = {
   title: string | null;
   siteName: string | null;
   label: string;
+  /** Notes only: sanitized rich-text HTML and the background color. */
+  content: string;
+  color: string;
   addedBy: string;
   updatedAt: string;
 };

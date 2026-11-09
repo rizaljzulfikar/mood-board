@@ -5,6 +5,7 @@ import {
   CircleNotch,
   InstagramLogo,
   Link as LinkIcon,
+  Note,
   PinterestLogo,
   SquaresFour,
   TiktokLogo,
@@ -66,6 +67,7 @@ export function ActionBar({
   onUploadClick,
   onAddGroup,
   onAddLink,
+  onAddNote,
 }: {
   uploading: boolean;
   importingLink: boolean;
@@ -73,6 +75,7 @@ export function ActionBar({
   onAddGroup: () => void;
   /** Import a link or social post; resolves to an error message or null. */
   onAddLink: (url: string) => Promise<string | null>;
+  onAddNote: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
@@ -144,6 +147,15 @@ export function ActionBar({
           aria-label="Add group"
         >
           <SquaresFour {...ICON} />
+        </button>
+        <button
+          className="action-bar-button"
+          type="button"
+          onClick={onAddNote}
+          title="Add a sticky note"
+          aria-label="Add note"
+        >
+          <Note {...ICON} />
         </button>
         <button
           className="action-bar-button"

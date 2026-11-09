@@ -18,6 +18,8 @@ function item(partial: Partial<ItemState> & { id: string }): ItemState {
     title: null,
     siteName: null,
     label: "",
+    content: "",
+    color: "#f6d660",
     addedBy: "userA",
     updatedAt: "2026-11-07T00:00:00.000Z",
     ...partial,

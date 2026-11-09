@@ -24,6 +24,8 @@ function item(overrides: Partial<ItemState> = {}): ItemState {
     title: null,
     siteName: null,
     label: "",
+    content: "",
+    color: "#f6d660",
     addedBy: "u",
     updatedAt: "2026-01-01T00:00:00Z",
     ...overrides,
@@ -36,6 +38,7 @@ function renderItem(props: Partial<Parameters<typeof BoardItem>[0]> = {}) {
   return renderToStaticMarkup(
     createElement(BoardItem, {
       item: item(),
+      scale: 1,
       selected: true,
       cropping: true,
       editing: false,
@@ -48,6 +51,10 @@ function renderItem(props: Partial<Parameters<typeof BoardItem>[0]> = {}) {
       onLabelChange: noop,
       onLabelCommit: noop,
       onLabelCancel: noop,
+      onNoteChange: noop,
+      onNoteCommit: noop,
+      onNoteCancel: noop,
+      onNoteColorChange: noop,
       ...props,
     })
   );
@@ -141,5 +148,64 @@ describe("GroupBox label zoom lock", () => {
     // group when the inverse transform is applied.
     expect(renderGroup(0.5)).toContain("max-width:180px");
     expect(renderGroup(2)).toContain("max-width:720px");
+  });
+});
+
+function note(overrides: Partial<ItemState> = {}): ItemState {
+  return item({ kind: "note", content: "", color: "#f6d660", ...overrides });
+}
+
+describe("BoardItem note UI", () => {
+  it("renders the colored card with the stored content", () => {
+    const html = renderItem({
+      item: note({ content: "<b>bold</b><ol><li>one</li></ol>", color: "#aecbfa" }),
+      cropping: false,
+    });
+    expect(html).toContain('class="note-body"');
+    expect(html).toContain("background:#aecbfa");
+    expect(html).toContain("<b>bold</b>");
+    expect(html).toContain("<ol><li>one</li></ol>");
+    // No crop handles for notes.
+    expect(html).not.toContain("crop-handle");
+  });
+
+  it("shows an edit hint on an empty note", () => {
+    expect(renderItem({ item: note() })).toContain("Double-click to edit");
+  });
+
+  it("renders the formatting toolbar with a zoom-locked transform while editing", () => {
+    const html = renderItem({ item: note({ content: "<b>x</b>" }), editing: true });
+    for (const label of [
+      "Bold (Ctrl+B)",
+      "Italic (Ctrl+I)",
+      "Underline (Ctrl+U)",
+      "Strikethrough",
+      "Numbered list",
+      "Bullet list",
+    ]) {
+      expect(html).toContain(`aria-label="${label}"`);
+    }
+    // Toolbar keeps a fixed screen size at 2x zoom.
+    expect(renderItem({ item: note(), editing: true, scale: 2 })).toContain(
+      "transform:scale(0.5) translateY(-8px)"
+    );
+    // The editable surface carries the note color and is empty (client fills it).
+    expect(html).toContain("contentEditable");
+    expect(html).toContain("background:#f6d660");
+  });
+
+  it("renders the color picker: palette swatches plus a custom input", () => {
+    const html = renderItem({ item: note({ color: "#ef8a80" }), editing: true });
+    for (const color of ["#f6d660", "#f2a45c", "#ef8a80", "#f2a7c3", "#b6dfb0", "#9fd8cb", "#aecbfa", "#cda9f2"]) {
+      expect(html).toContain(`aria-label="Note color ${color}"`);
+    }
+    expect(html).toContain('type="color"');
+    expect(html).toContain('aria-label="Custom note color"');
+    // The active color is marked.
+    expect(html).toContain('aria-pressed="true"');
+  });
+
+  it("keeps the resize handle available for notes", () => {
+    expect(renderItem({ item: note(), cropping: false })).toContain('class="resize-handle"');
   });
 });

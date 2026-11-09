@@ -1,9 +1,14 @@
 import { Schema, model, models, type Document, type Types } from "mongoose";
+import { NOTE_DEFAULT_COLOR } from "../note-format";
 
 export interface ItemDoc extends Document<Types.ObjectId> {
   project: Types.ObjectId;
-  /** "image" = plain picture; "link" = URL card whose objectKey is the stored thumbnail. */
-  kind: "image" | "link";
+  /**
+   * "image" = plain picture; "link" = URL card whose objectKey is the stored
+   * thumbnail; "note" = sticky note whose content is sanitized rich-text HTML
+   * (objectKey is a placeholder, no storage object exists).
+   */
+  kind: "image" | "link" | "note";
   objectKey: string;
   originalName: string;
   mime: string;
@@ -23,6 +28,10 @@ export interface ItemDoc extends Document<Types.ObjectId> {
   siteName: string | null;
   /** User-facing label, editable on the board. */
   label: string;
+  /** Rich-text HTML for note items, sanitized to the note tag whitelist. */
+  content: string;
+  /** Note background color, a strict `#rrggbb` hex string. */
+  color: string;
   addedBy: Types.ObjectId;
   deletedAt: Date | null;
   createdAt: Date;
@@ -42,7 +51,7 @@ const cropSchema = new Schema(
 const itemSchema = new Schema(
   {
     project: { type: Schema.Types.ObjectId, ref: "Project", required: true, index: true },
-    kind: { type: String, enum: ["image", "link"], default: "image", required: true },
+    kind: { type: String, enum: ["image", "link", "note"], default: "image", required: true },
     objectKey: { type: String, required: true, unique: true },
     originalName: { type: String, required: true },
     mime: { type: String, required: true },
@@ -58,6 +67,8 @@ const itemSchema = new Schema(
     title: { type: String, default: null },
     siteName: { type: String, default: null },
     label: { type: String, default: "" },
+    content: { type: String, default: "" },
+    color: { type: String, default: NOTE_DEFAULT_COLOR },
     addedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
     deletedAt: { type: Date, default: null, index: true },
   },

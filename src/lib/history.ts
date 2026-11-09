@@ -163,7 +163,18 @@ export async function waitForSettled(promises: Set<Promise<unknown>>): Promise<v
 }
 
 /** Fields compared per kind; `updatedAt` is excluded everywhere. */
-const ITEM_FIELDS = ["x", "y", "width", "height", "z", "rotation", "label", "crop"] as const;
+const ITEM_FIELDS = [
+  "x",
+  "y",
+  "width",
+  "height",
+  "z",
+  "rotation",
+  "label",
+  "crop",
+  "content",
+  "color",
+] as const;
 const GROUP_FIELDS = ["x", "y", "width", "height", "z", "label"] as const;
 const CONNECTION_FIELDS = ["style"] as const;
 

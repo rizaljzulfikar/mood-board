@@ -32,6 +32,8 @@ function makeItem(id: string, overrides: Partial<ItemState> = {}): ItemState {
     title: null,
     siteName: null,
     label: "",
+    content: "",
+    color: "#f6d660",
     addedBy: "u",
     updatedAt: "2026-01-01T00:00:00Z",
     ...overrides,
@@ -300,6 +302,8 @@ describe("planServerOps", () => {
           z: 2,
           label: "hi",
           crop: { x: 0, y: 0, w: 1, h: 1 },
+          content: "",
+          color: "#f6d660",
         },
       },
     ]);

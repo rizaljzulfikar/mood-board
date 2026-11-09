@@ -28,6 +28,7 @@ import {
   type Snapshot,
 } from "@/lib/history";
 import { fitViewport, toScreen, toWorld, zoomAt, type Viewport } from "@/lib/viewport";
+import { NOTE_DEFAULT_HEIGHT, NOTE_DEFAULT_WIDTH, cleanNoteColor } from "@/lib/note-format";
 import {
   createViewportSaver,
   getLocalStorage,
@@ -52,13 +53,15 @@ const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const GROUP_BUCKET_PADDING = 32;
 const NEW_GROUP_WIDTH = 360;
 const NEW_GROUP_HEIGHT = 240;
+const NOTE_WIDTH = NOTE_DEFAULT_WIDTH;
+const NOTE_HEIGHT = NOTE_DEFAULT_HEIGHT;
 
 type Selection = { kind: "item" | "group" | "connection"; id: string } | null;
 
 type DragState =
   | { kind: "pan"; startX: number; startY: number; vx: number; vy: number }
   | { kind: "move"; id: string; dx: number; dy: number }
-  | { kind: "resize"; id: string; startX: number; startY: number; aspect: number }
+  | { kind: "resize"; id: string; startX: number; startY: number; aspect: number; freeHeight: boolean }
   | {
       kind: "crop";
       id: string;
@@ -148,6 +151,10 @@ export function Board({
     draft: string;
     target: "group" | "item";
   } | null>(null);
+  // Note being edited plus a mirrored draft (kept fresh via onInput) so a
+  // click on the pan/select background — which preventDefaults pointerdown
+  // and thus suppresses blur — can still commit the latest content.
+  const [noteEdit, setNoteEdit] = useState<{ id: string; draft: string } | null>(null);
   const [connectPoint, setConnectPoint] = useState<{ x: number; y: number } | null>(null);
   // Group currently "catching" a dragged image — highlighted as the bucket target.
   const [bucketTargetId, setBucketTargetId] = useState<string | null>(null);
@@ -371,9 +378,10 @@ export function Board({
       if (selectionRef.current?.kind === "item" && selectionRef.current.id === id) {
         select(null);
       }
+      if (noteEdit?.id === id) setNoteEdit(null);
       await track(fetch(`/api/items/${id}`, { method: "DELETE" }));
     },
-    [commitSettled, select, setItemsBoth, track]
+    [commitSettled, noteEdit?.id, select, setItemsBoth, track]
   );
 
   const patchGroup = useCallback(
@@ -551,6 +559,117 @@ export function Board({
 
   const cancelLabelEdit = useCallback(() => setLabelEdit(null), []);
 
+  /* ---------- note editing ---------- */
+
+  /** Double-click entry point for both notes and image/link labels. */
+  const startItemEdit = useCallback(
+    (item: ItemState) => {
+      if (item.kind === "note") setNoteEdit({ id: item.id, draft: item.content });
+      else startItemLabelEdit(item);
+    },
+    [startItemLabelEdit]
+  );
+
+  const changeNoteEdit = useCallback((item: ItemState, html: string) => {
+    setNoteEdit((prev) => (prev && prev.id === item.id ? { ...prev, draft: html } : prev));
+  }, []);
+
+  /** Persist note content if it actually changed; the caller exits edit mode. */
+  const commitNoteContent = useCallback(
+    (id: string, html: string) => {
+      const item = itemsRef.current.find((i) => i.id === id);
+      if (!item || item.kind !== "note") return;
+      if (html === item.content) return;
+      setItemsBoth(itemsRef.current.map((i) => (i.id === id ? { ...i, content: html } : i)));
+      commitSettled();
+      void track(
+        fetch(`/api/items/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: html }),
+        })
+      );
+    },
+    [commitSettled, setItemsBoth, track]
+  );
+
+  /** Blur commit: the DOM holds the truth, use it directly. */
+  const commitNoteHtml = useCallback(
+    (item: ItemState, html: string) => {
+      setNoteEdit((prev) => (prev && prev.id === item.id ? null : prev));
+      commitNoteContent(item.id, html);
+    },
+    [commitNoteContent]
+  );
+
+  /** Background-click commit: uses the mirrored draft (blur never fired). */
+  const commitNoteEdit = useCallback(() => {
+    if (!noteEdit) return;
+    const { id, draft } = noteEdit;
+    setNoteEdit(null);
+    commitNoteContent(id, draft);
+  }, [commitNoteContent, noteEdit]);
+
+  const cancelNoteEdit = useCallback(() => setNoteEdit(null), []);
+
+  /** Color presets and picker drags stream many values; one PATCH per pause. */
+  const colorPatchTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  useEffect(() => {
+    const timers = colorPatchTimersRef.current;
+    return () => {
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+    };
+  }, []);
+
+  const changeNoteColor = useCallback(
+    (item: ItemState, color: string) => {
+      const clean = cleanNoteColor(color);
+      if (!clean) return;
+      const current = itemsRef.current.find((i) => i.id === item.id);
+      if (!current || current.color === clean) return;
+      setItemsBoth(itemsRef.current.map((i) => (i.id === item.id ? { ...i, color: clean } : i)));
+      const timers = colorPatchTimersRef.current;
+      const existing = timers.get(item.id);
+      if (existing) clearTimeout(existing);
+      timers.set(
+        item.id,
+        setTimeout(() => {
+          timers.delete(item.id);
+          commitSettled();
+          void track(
+            fetch(`/api/items/${item.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ color: clean }),
+            })
+          );
+        }, 250)
+      );
+    },
+    [commitSettled, setItemsBoth, track]
+  );
+
+  const addNote = useCallback(async () => {
+    const center = centerWorld();
+    const res = await fetch(`/api/projects/${projectId}/items/notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        x: Math.round(center.x - NOTE_WIDTH / 2),
+        y: Math.round(center.y - NOTE_HEIGHT / 2),
+        width: NOTE_WIDTH,
+        height: NOTE_HEIGHT,
+      }),
+    });
+    if (!res.ok) return;
+    const data = (await res.json()) as { item: ItemState };
+    setItemsBoth([...itemsRef.current, data.item]);
+    commitSettled();
+    select({ kind: "item", id: data.item.id });
+    setNoteEdit({ id: data.item.id, draft: data.item.content });
+  }, [centerWorld, commitSettled, projectId, select, setItemsBoth]);
+
   /* ---------- pointer interactions ---------- */
 
   const screenToBoard = useCallback((clientX: number, clientY: number) => {
@@ -621,6 +740,8 @@ export function Board({
           startX: world.x,
           startY: world.y,
           aspect: item.height / item.width,
+          // Notes resize height independently; images stay aspect-locked.
+          freeHeight: item.kind === "note",
         },
         () => lockedRef.current.add(item.id)
       );
@@ -631,6 +752,7 @@ export function Board({
   /** Double-clicking the resize handle toggles four-edge crop mode. */
   const toggleCrop = useCallback(
     (item: ItemState) => {
+      if (item.kind === "note") return; // notes have no image to crop
       select({ kind: "item", id: item.id });
       setCropEditId((current) => (current === item.id ? null : item.id));
     },
@@ -772,6 +894,7 @@ export function Board({
       if (e.button === 0) {
         select(null);
         commitLabelEdit(); // clicking away saves the label draft
+        commitNoteEdit(); // …and the note draft (blur is suppressed by preventDefault)
       }
       const pan: NonNullable<DragState> = {
         kind: "pan",
@@ -788,7 +911,7 @@ export function Board({
       }
       queueDrag(e, pan);
     },
-    [commitLabelEdit, queueDrag, select]
+    [commitLabelEdit, commitNoteEdit, queueDrag, select]
   );
 
   const onPointerMove = useCallback(
@@ -858,7 +981,9 @@ export function Board({
         const item = itemsRef.current.find((i) => i.id === drag.id);
         if (!item) return;
         const width = Math.min(MAX_DIM, Math.max(MIN_DIM, world.x - item.x));
-        const height = Math.min(MAX_DIM, Math.max(MIN_DIM, width * drag.aspect));
+        const height = drag.freeHeight
+          ? Math.min(MAX_DIM, Math.max(MIN_DIM, world.y - item.y))
+          : Math.min(MAX_DIM, Math.max(MIN_DIM, width * drag.aspect));
         setItemsBoth(
           itemsRef.current.map((i) =>
             i.id === drag.id ? { ...i, width, height } : i
@@ -1060,11 +1185,20 @@ export function Board({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      // Inputs and the note editor own their keys: typing Delete must not
+      // delete the note, and Ctrl+Z must stay native text undo.
+      const t = e.target;
+      if (
+        t instanceof HTMLInputElement ||
+        t instanceof HTMLTextAreaElement ||
+        (t instanceof HTMLElement && t.isContentEditable)
+      )
+        return;
       const sel = selectionRef.current;
       if (e.key === "Escape") {
         select(null);
         setLabelEdit(null);
+        setNoteEdit(null);
         setCropEditId(null);
       }
       if ((e.key === "Delete" || e.key === "Backspace") && sel) {
@@ -1089,8 +1223,14 @@ export function Board({
 
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
-      // Let inputs/textareas handle their own paste (labels, link dialog).
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      // Let inputs and the note editor handle their own paste.
+      const t = e.target;
+      if (
+        t instanceof HTMLInputElement ||
+        t instanceof HTMLTextAreaElement ||
+        (t instanceof HTMLElement && t.isContentEditable)
+      )
+        return;
       const { files, url } = extractPastePayload(e.clipboardData);
       if (files.length === 0 && !url) return;
       e.preventDefault();
@@ -1376,20 +1516,29 @@ export function Board({
           <BoardItem
             key={item.id}
             item={item}
+            scale={v.scale}
             selected={selection?.kind === "item" && selection.id === item.id}
             cropping={cropEditId === item.id}
-            editing={labelEdit?.target === "item" && labelEdit.id === item.id}
+            editing={
+              item.kind === "note"
+                ? noteEdit?.id === item.id
+                : labelEdit?.target === "item" && labelEdit.id === item.id
+            }
             draftLabel={labelEdit?.target === "item" ? (labelEdit?.draft ?? "") : ""}
             onItemPointerDown={startMove}
             onResizePointerDown={startResize}
             onCropToggle={toggleCrop}
             onCropPointerDown={startCropResize}
-            onLabelDoubleClick={startItemLabelEdit}
+            onLabelDoubleClick={startItemEdit}
             onLabelChange={(value) =>
               setLabelEdit((prev) => (prev ? { ...prev, draft: value } : prev))
             }
             onLabelCommit={commitLabelEdit}
             onLabelCancel={cancelLabelEdit}
+            onNoteChange={changeNoteEdit}
+            onNoteCommit={commitNoteHtml}
+            onNoteCancel={cancelNoteEdit}
+            onNoteColorChange={changeNoteColor}
           />
         ))}
       </div>
@@ -1415,7 +1564,7 @@ export function Board({
       {items.length === 0 && !uploading && !importingLink && (
         <div className="empty-hint">
           Drag & drop images or links onto this canvas — or use the actions on the
-          left to upload or add a link.
+          left to upload, add a link, or add a note.
         </div>
       )}
       {dropActive && <div className="drop-overlay">Drop to add images or links</div>}
@@ -1428,6 +1577,7 @@ export function Board({
         importingLink={importingLink}
         onUploadClick={() => fileInputRef.current?.click()}
         onAddGroup={() => void addGroup()}
+        onAddNote={() => void addNote()}
         onAddLink={(url) => {
           const center = centerWorld();
           return importFromUrl(url, center.x, center.y);

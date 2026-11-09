@@ -5,6 +5,8 @@ import { Item } from "@/lib/models/Item";
 import { itemJSON } from "@/lib/items";
 import { cleanLabel } from "@/lib/groups";
 import { normalizeCrop } from "@/lib/crop";
+import { sanitizeNoteContent } from "@/lib/note-content";
+import { cleanNoteColor } from "@/lib/note-format";
 import { broadcastDelete, broadcastUpsert } from "@/lib/realtime-publish";
 
 export const runtime = "nodejs";
@@ -44,6 +46,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const rotation = num(body.rotation);
     const z = num(body.z);
     const label = cleanLabel(body.label);
+    // Note fields: content is sanitized to the note whitelist, color must be
+    // strict `#rrggbb`. Scoped to notes so image/link docs never gain them.
+    const isNote = item.kind === "note";
+    const content =
+      isNote && typeof body.content === "string" ? sanitizeNoteContent(body.content) : undefined;
+    const color = isNote ? cleanNoteColor(body.color) : undefined;
     const crop =
       body.crop && typeof body.crop === "object" ? normalizeCrop(body.crop) : undefined;
 
@@ -57,6 +65,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (rotation !== undefined) item.rotation = rotation;
     if (z !== undefined) item.z = Math.round(z);
     if (label !== undefined) item.label = label;
+    if (content !== undefined) item.content = content;
+    if (color !== undefined) item.color = color;
     if (crop !== undefined) item.set("crop", crop);
 
     await item.save();

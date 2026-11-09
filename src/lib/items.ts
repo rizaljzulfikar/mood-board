@@ -4,6 +4,7 @@ import { Item } from "./models/Item";
 import { buildObjectKey } from "./storage-key";
 import { putObjectBuffer } from "./minio";
 import { normalizeCrop } from "./crop";
+import { NOTE_DEFAULT_COLOR, NOTE_MAX_CONTENT_LENGTH } from "./note-format";
 
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 20 MB
 
@@ -39,6 +40,8 @@ export function itemJSON(item: ItemDoc) {
     title: item.title ?? null,
     siteName: item.siteName ?? null,
     label: item.label ?? "",
+    content: (item.content ?? "").slice(0, NOTE_MAX_CONTENT_LENGTH),
+    color: item.color ?? NOTE_DEFAULT_COLOR,
     addedBy: String(item.addedBy),
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
