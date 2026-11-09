@@ -27,7 +27,7 @@ import {
   type ServerOp,
   type Snapshot,
 } from "@/lib/history";
-import { fitViewport, toScreen, toWorld, zoomAt, type Viewport } from "@/lib/viewport";
+import { fitViewport, toScreen, toWorld, wheelToViewport, zoomAt, type Viewport } from "@/lib/viewport";
 import { NOTE_DEFAULT_HEIGHT, NOTE_DEFAULT_WIDTH, cleanNoteColor } from "@/lib/note-format";
 import {
   createViewportSaver,
@@ -1168,17 +1168,27 @@ export function Board({
     [commitSettled, createConnection, patchGroup, patchItem, screenToBoard, settleItemIntoBucket]
   );
 
-  /* ---------- wheel zoom (non-passive so we can preventDefault) ---------- */
+  /* ---------- wheel: plain scroll pans, ctrl/cmd (or pinch) zooms ---------- */
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
+      // Keep the browser from page-scrolling / page-zooming over the canvas.
       e.preventDefault();
       const rect = el.getBoundingClientRect();
-      const factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
       updateViewport(
-        zoomAt(viewportRef.current, e.clientX - rect.left, e.clientY - rect.top, factor)
+        wheelToViewport(viewportRef.current, {
+          cursorX: e.clientX - rect.left,
+          cursorY: e.clientY - rect.top,
+          width: rect.width,
+          height: rect.height,
+          deltaX: e.deltaX,
+          deltaY: e.deltaY,
+          deltaMode: e.deltaMode,
+          ctrlKey: e.ctrlKey,
+          metaKey: e.metaKey,
+        })
       );
     };
     el.addEventListener("wheel", onWheel, { passive: false });

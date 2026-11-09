@@ -29,6 +29,52 @@ export function zoomAt(
   return { scale, x: sx - applied * (sx - v.x), y: sy - applied * (sy - v.y) };
 }
 
+/** Pixels per line when the browser reports line-based wheel deltas (Firefox). */
+export const WHEEL_LINE_UNIT = 16;
+/** One full wheel notch (Chrome pixel deltas ≈ ±100) is one zoom step. */
+const WHEEL_ZOOM_NOTCH = 100;
+/** Zoom factor for one wheel notch with ctrl/cmd held — parity with zoom buttons. */
+export const WHEEL_ZOOM_STEP = 1.1;
+
+export type WheelInput = {
+  /** Cursor position relative to the board element. */
+  cursorX: number;
+  cursorY: number;
+  /** Board element size, for page-mode delta normalization. */
+  width: number;
+  height: number;
+  deltaX: number;
+  deltaY: number;
+  deltaMode: number;
+  ctrlKey: boolean;
+  metaKey: boolean;
+};
+
+/**
+ * Wheel/trackpad input → next viewport. Plain scroll — including two-finger
+ * trackpad pan — scrolls the canvas document-style (delta moves content the
+ * way a page scrolls). Ctrl/cmd+wheel zooms anchored at the cursor; trackpad
+ * pinch is reported by browsers as ctrl+wheel, so it zooms too. Zoom is
+ * proportional to the delta: a full notch equals one zoom step, small pinch
+ * deltas zoom smoothly.
+ */
+export function wheelToViewport(v: Viewport, input: WheelInput): Viewport {
+  const unit =
+    input.deltaMode === 1
+      ? WHEEL_LINE_UNIT
+      : input.deltaMode === 2
+        ? input.height * 0.9
+        : 1;
+  const dy = input.deltaY * unit;
+
+  if (input.ctrlKey || input.metaKey) {
+    const factor = Math.pow(WHEEL_ZOOM_STEP, -dy / WHEEL_ZOOM_NOTCH);
+    return zoomAt(v, input.cursorX, input.cursorY, factor);
+  }
+
+  return { ...v, x: v.x - input.deltaX * unit, y: v.y - dy };
+}
+
 export type FitItem = { x: number; y: number; width: number; height: number };
 
 const FIT_PADDING = 80;
