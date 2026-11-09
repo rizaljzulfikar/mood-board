@@ -1109,41 +1109,17 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
   font-size: 13px;
   color: #a0a0ae;
+  cursor: pointer;
 }
 
-.share-form-wrap {
-  position: relative;
-  display: flex;
-}
-
-.toolbar-error {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid rgb(255 123 123 / 0.35);
-  background: rgb(46 22 26 / 0.95);
-  backdrop-filter: blur(8px);
-  color: #ff7b7b;
-  font-size: 12px;
-  line-height: 1.35;
-  max-width: 320px;
-  z-index: 80;
-}
-
-.toolbar-error.align-right {
-  left: auto;
-  right: 0;
-}
-
-.toolbar-error svg {
-  flex-shrink: 0;
+.member-info:hover {
+  color: #e8e8ee;
 }
 
 @keyframes toolbar-spin {
@@ -1162,24 +1138,83 @@ body {
   }
 }
 
-.share-form {
+/* ---------- member dialog ---------- */
+
+.member-dialog-invite {
+  margin-bottom: 14px;
+}
+
+.member-dialog-invite-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
-.share-form input {
-  width: 180px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  border: 1px solid #2c2c36;
-  background: #101014;
-  color: #e8e8ee;
+.member-dialog-invite-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.member-dialog-invite-row .primary-button {
+  flex-shrink: 0;
+}
+
+.member-dialog-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.member-dialog-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid #23232c;
+}
+
+.member-dialog-row:last-child {
+  border-bottom: none;
+}
+
+.member-dialog-who {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.member-dialog-name {
   font-size: 13px;
-  outline: none;
+  font-weight: 600;
+  color: #e8e8ee;
 }
 
-.share-form input:focus {
-  border-color: #5b7cfa;
+.member-dialog-email {
+  font-size: 12px;
+  color: #8a8a99;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-badge {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border: 1px solid #2c2c36;
+  border-radius: 999px;
+  background: #1f1f28;
+  color: #a0a0ae;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.member-dialog-error {
+  display: flex;
+  margin-top: 10px;
 }
 
 /* ---------- floating action bar ---------- */

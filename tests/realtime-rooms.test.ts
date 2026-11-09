@@ -1,9 +1,23 @@
 import { describe, it, expect } from "vitest";
 import { RoomRegistry, type RoomClient } from "../src/realtime/rooms";
 
-function client(id: string, projectId: string, userId: string): RoomClient & { sent: string[] } {
+function client(
+  id: string,
+  projectId: string,
+  userId: string
+): RoomClient & { sent: string[]; closed: number[] } {
   const sent: string[] = [];
-  return { id, projectId, userId, name: userId, sent, send: (m) => sent.push(m) };
+  const closed: number[] = [];
+  return {
+    id,
+    projectId,
+    userId,
+    name: userId,
+    sent,
+    send: (m) => sent.push(m),
+    close: (code) => closed.push(code),
+    closed,
+  };
 }
 
 describe("RoomRegistry", () => {
@@ -50,9 +64,37 @@ describe("RoomRegistry", () => {
 
   it("swallows send errors so one dead socket cannot break a broadcast", () => {
     const r = new RoomRegistry();
-    const bad: RoomClient = { id: "bad", projectId: "p1", userId: "u1", name: "u1", send: () => { throw new Error("boom"); } };
+    const bad: RoomClient = {
+      id: "bad",
+      projectId: "p1",
+      userId: "u1",
+      name: "u1",
+      send: () => {
+        throw new Error("boom");
+      },
+      close: () => {},
+    };
     r.add(bad);
     r.add(client("ok", "p1", "u2"));
     expect(() => r.broadcast("p1", { type: "item:delete", id: "x" })).not.toThrow();
+  });
+
+  it("closeUser closes every socket of that user in the room and returns the count", () => {
+    const r = new RoomRegistry();
+    const a1 = client("a1", "p1", "u1");
+    const a2 = client("a2", "p1", "u1");
+    const b = client("b", "p1", "u2");
+    const otherRoom = client("c", "p2", "u1"); // same user, different room — untouched
+    r.add(a1);
+    r.add(a2);
+    r.add(b);
+    r.add(otherRoom);
+
+    expect(r.closeUser("p1", "u1")).toBe(2);
+    expect(a1.closed).toEqual([4002]);
+    expect(a2.closed).toEqual([4002]);
+    expect(b.closed).toEqual([]);
+    expect(otherRoom.closed).toEqual([]);
+    expect(r.closeUser("p1", "ghost")).toBe(0);
   });
 });

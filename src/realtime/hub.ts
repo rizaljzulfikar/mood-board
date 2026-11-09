@@ -52,6 +52,23 @@ export async function startHub(options: HubOptions): Promise<Server> {
   return http;
 }
 
+/**
+ * Broadcasts a published event to its room. A `project:members` event also
+ * kicks removed users' sockets (code 4002) so revoked members stop receiving
+ * board events; their presence leave flows through the regular close path.
+ */
+function applyPublish(registry: RoomRegistry, msg: Partial<PublishMessage>): void {
+  if (msg.type !== "publish" || typeof msg.projectId !== "string") return;
+  const event = msg.event as ServerMessage | undefined;
+  if (!event || typeof event.type !== "string") return;
+  registry.broadcast(msg.projectId, event);
+  if (event.type === "project:members") {
+    for (const userId of event.removedUserIds) {
+      registry.closeUser(msg.projectId, userId);
+    }
+  }
+}
+
 async function handleConnection(
   socket: WebSocket,
   req: IncomingMessage,
@@ -64,10 +81,7 @@ async function handleConnection(
     if (req.headers.authorization === `Bearer ${secret}`) {
       socket.on("message", (data) => {
         try {
-          const msg = JSON.parse(String(data)) as Partial<PublishMessage>;
-          if (msg.type === "publish" && typeof msg.projectId === "string") {
-            registry.broadcast(msg.projectId, msg.event as ServerMessage);
-          }
+          applyPublish(registry, JSON.parse(String(data)) as Partial<PublishMessage>);
         } catch {
           // Ignore malformed publisher messages.
         }
@@ -94,6 +108,13 @@ async function handleConnection(
       name: claims.name,
       send: (message: string) => {
         if (socket.readyState === WebSocket.OPEN) socket.send(message);
+      },
+      close: (code: number) => {
+        try {
+          socket.close(code);
+        } catch {
+          // A half-open socket must not break the kick.
+        }
       },
     };
     const { firstForUser } = registry.add(client);

@@ -103,7 +103,7 @@ export function Board({
   initialItems: ItemState[];
   initialGroups: GroupState[];
   initialConnections: ConnectionState[];
-  user: { id: string; name: string };
+  user: { id: string; email: string; name: string };
   project: ProjectInfo;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -129,6 +129,17 @@ export function Board({
     connectionsRef.current = next;
     setConnections(next);
   }, []);
+
+  // Membership lives in local state so the realtime `project:members` event
+  // can update it live. Refreshed server props stay authoritative (React's
+  // adjust-state-on-prop-change pattern): SSR data is fetched after the
+  // mutation, so overwriting a racing WS update is safe.
+  const [projectInfo, setProjectInfo] = useState(project);
+  const [prevProjectProp, setPrevProjectProp] = useState(project);
+  if (prevProjectProp !== project) {
+    setPrevProjectProp(project);
+    setProjectInfo(project);
+  }
 
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
   const viewportRef = useRef(viewport);
@@ -1363,6 +1374,16 @@ export function Board({
             window.location.assign("/projects");
             return;
           }
+          if (message.type === "project:members") {
+            if (message.removedUserIds.includes(user.id)) {
+              // Membership revoked (removed or left from another device).
+              ws.close();
+              window.location.assign("/projects");
+              return;
+            }
+            setProjectInfo((current) => ({ ...current, members: message.members }));
+            return;
+          }
           const next = applyRealtimeEvent(
             { items: itemsRef.current, groups: groupsRef.current, connections: connectionsRef.current },
             message,
@@ -1610,7 +1631,7 @@ export function Board({
       />
 
       <div className="board-toolbar">
-        <Toolbar project={project} activeUsers={users} />
+        <Toolbar project={projectInfo} activeUsers={users} user={user} />
       </div>
 
       <input

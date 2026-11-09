@@ -88,6 +88,53 @@ describe("realtime hub", () => {
     a.close(); b.close(); pub.close();
   });
 
+  it("broadcasts project:members and kicks removed users' sockets with 4002", async () => {
+    server = await startHub({ port: 0, secret: SECRET });
+    const port = portOf(server);
+    const a = new WebSocket(`ws://localhost:${port}?ticket=${await signRoomTicket("p1", "u1", "A", 60_000)}`);
+    const b = new WebSocket(`ws://localhost:${port}?ticket=${await signRoomTicket("p1", "u2", "B", 60_000)}`);
+    await next(a);
+    await next(b);
+
+    // Ordered message queue: unlike stacked `ws.once` listeners this never
+    // hands the same frame to two consumers.
+    const bMessages: any[] = [];
+    const bWaiters: Array<(m: any) => void> = [];
+    b.on("message", (d) => {
+      const msg = JSON.parse(String(d));
+      const waiter = bWaiters.shift();
+      if (waiter) waiter(msg);
+      else bMessages.push(msg);
+    });
+    const nextB = (): Promise<any> =>
+      new Promise((resolve) => {
+        if (bMessages.length) resolve(bMessages.shift());
+        else bWaiters.push(resolve);
+      });
+
+    const aClosed = new Promise<number>((resolve) => a.once("close", (code) => resolve(code)));
+    const pub = new WebSocket(`ws://localhost:${port}`, { headers: { Authorization: `Bearer ${SECRET}` } });
+    await new Promise((r) => pub.once("open", r));
+    pub.send(
+      JSON.stringify({
+        type: "publish",
+        projectId: "p1",
+        event: {
+          type: "project:members",
+          members: [{ id: "u2", email: "b@test.local", name: "B" }],
+          removedUserIds: ["u1"],
+        },
+      })
+    );
+
+    expect(await nextB()).toMatchObject({ type: "project:members" });
+    expect(await aClosed).toBe(4002);
+    // Kicking flows through the regular close cleanup, so presence updates too.
+    expect(await nextB()).toEqual({ type: "presence:leave", userId: "u1" });
+    b.close();
+    pub.close();
+  });
+
   it("cleans up terminated clients and omits them from later presence snapshots", async () => {
     server = await startHub({ port: 0, secret: SECRET });
     const port = portOf(server);

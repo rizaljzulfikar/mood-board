@@ -7,7 +7,7 @@
  * message is dropped. A realtime outage must never fail the HTTP mutation.
  */
 import WebSocket from "ws";
-import type { EntityKind, PublishMessage, ServerMessage } from "./realtime-protocol";
+import type { EntityKind, MemberSummary, PublishMessage, ServerMessage } from "./realtime-protocol";
 import { env } from "./env";
 
 export function buildPublishMessage(
@@ -103,6 +103,27 @@ export function broadcastDelete(projectId: string, kind: EntityKind, id: string)
 export function broadcastProjectDeleted(projectId: string): void {
   try {
     transport({ type: "publish", projectId, event: { type: "project:deleted" } });
+  } catch {
+    // The hub is best-effort: never fail the mutation that triggered this.
+  }
+}
+
+/**
+ * Publishes the project's member list after an add/remove. `removedUserIds`
+ * lets the hub kick those users' sockets so removed members stop receiving
+ * board events.
+ */
+export function broadcastMembers(
+  projectId: string,
+  members: MemberSummary[],
+  removedUserIds: string[]
+): void {
+  try {
+    transport({
+      type: "publish",
+      projectId,
+      event: { type: "project:members", members, removedUserIds },
+    });
   } catch {
     // The hub is best-effort: never fail the mutation that triggered this.
   }

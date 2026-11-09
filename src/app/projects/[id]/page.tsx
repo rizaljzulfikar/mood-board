@@ -61,7 +61,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       initialItems={items.map(itemJSON)}
       initialGroups={groups.map(groupJSON)}
       initialConnections={connections.map(connectionJSON)}
-      user={{ id: user.id, name: user.name }}
+      user={{ id: user.id, name: user.name, email: user.email }}
       project={info}
     />
   );

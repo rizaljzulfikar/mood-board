@@ -66,4 +66,20 @@ describe("default publish transport", () => {
     expect(sent).toHaveLength(1);
     expect(JSON.parse(sent[0]).event.data.id).toBe("warm");
   });
+
+  it("broadcastMembers frames the member list and removed ids", async () => {
+    const mod = await import("@/lib/realtime-publish");
+    const members = [{ id: "u2", email: "b@test.local", name: "B" }];
+    mod.broadcastMembers("p1", members, ["u1"]);
+    instances[0].open();
+
+    expect(sent).toHaveLength(1);
+    const frame = JSON.parse(sent[0]);
+    expect(frame.projectId).toBe("p1");
+    expect(frame.event).toEqual({
+      type: "project:members",
+      members,
+      removedUserIds: ["u1"],
+    });
+  });
 });

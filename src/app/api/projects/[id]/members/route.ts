@@ -2,8 +2,22 @@ import { connectDB } from "@/lib/db";
 import { Project } from "@/lib/models/Project";
 import { User } from "@/lib/models/User";
 import { apiError, ApiError, json, requireMember } from "@/lib/api";
+import { broadcastMembers } from "@/lib/realtime-publish";
+import type { MemberSummary } from "@/lib/realtime-protocol";
+import type { Types } from "mongoose";
 
 export const runtime = "nodejs";
+
+/** Loads the fresh member list (id/email/name) after a membership change. */
+async function memberSummaries(memberIds: Types.ObjectId[]): Promise<MemberSummary[]> {
+  const docs = await User.find({ _id: { $in: memberIds } }).select("email name");
+  const byId = new Map(docs.map((d) => [String(d._id), d]));
+  // Keep the project's member order; skip ids with no matching account.
+  return memberIds
+    .map((id) => byId.get(String(id)))
+    .filter((d): d is (typeof docs)[number] => Boolean(d))
+    .map((d) => ({ id: String(d._id), email: d.email, name: d.name }));
+}
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -25,7 +39,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     await Project.updateOne({ _id: project._id }, { $addToSet: { members: target._id } });
     const fresh = await Project.findById(project._id);
-    return json({ ok: true, memberCount: 1 + (fresh?.members.length ?? 0) });  } catch (e) {
+    if (fresh) {
+      broadcastMembers(id, await memberSummaries(fresh.members), []);
+    }
+    return json({ ok: true, memberCount: 1 + (fresh?.members.length ?? 0) });
+  } catch (e) {
     return apiError(e);
   }
 }
@@ -55,6 +73,9 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
 
     await Project.updateOne({ _id: project._id }, { $pull: { members: target._id } });
     const fresh = await Project.findById(project._id);
+    if (fresh) {
+      broadcastMembers(id, await memberSummaries(fresh.members), [String(target._id)]);
+    }
     return json({ ok: true, memberCount: 1 + (fresh?.members.length ?? 0) });
   } catch (e) {
     return apiError(e);

@@ -16,8 +16,12 @@ export type PresenceUser = {
   cursor: Cursor;
 };
 
+/** Member identity as it travels over the wire (page.tsx populates owner/members with these fields). */
+export type MemberSummary = { id: string; email: string; name: string };
+
 export type ServerMessage =
   | { type: "project:deleted" }
+  | { type: "project:members"; members: MemberSummary[]; removedUserIds: string[] }
   | { type: "presence:snapshot"; users: PresenceUser[] }
   | { type: "presence:join"; user: PresenceUser }
   | { type: "presence:leave"; userId: string }

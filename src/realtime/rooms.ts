@@ -15,6 +15,8 @@ export type RoomClient = {
   userId: string;
   name: string;
   send: (message: string) => void;
+  /** Closes the underlying socket (e.g. kicking a removed member with 4002). */
+  close: (code: number) => void;
 };
 
 type PresenceEntry = { name: string; cursor: Cursor };
@@ -97,6 +99,30 @@ export class RoomRegistry {
         // A dead socket must not break the broadcast for everyone else.
       }
     }
+  }
+
+  /**
+   * Closes every socket `userId` holds in the room (membership revoked).
+   * Registry cleanup and the presence leave happen through the sockets'
+   * regular close path, so callers must only invoke `close`. Returns the
+   * number of sockets closed.
+   */
+  closeUser(projectId: string, userId: string, code = 4002): number {
+    const room = this.rooms.get(projectId);
+    if (!room) return 0;
+
+    let closed = 0;
+    for (const clientId of room) {
+      const client = this.clients.get(clientId);
+      if (!client || client.userId !== userId) continue;
+      closed += 1;
+      try {
+        client.close(code);
+      } catch {
+        // A dead socket must not break the kick for everyone else.
+      }
+    }
+    return closed;
   }
 
   /** Stores the last cursor for a user in a room. */
