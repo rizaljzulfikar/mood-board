@@ -18,7 +18,7 @@ MongoDB container (via Mongoose).
 docker compose up -d        # mongo + minio + bucket init
 npm install
 npm run dev                 # http://localhost:3000
-npm run realtime             # WebSocket hub on :4000
+npm run realtime             # WebSocket hub on :30021
 # Or run the hub in Docker:
 docker compose up -d realtime
 ```
@@ -59,7 +59,7 @@ docker compose up -d realtime
 | `npm run build` | production build           |
 | `npm start`     | serve production build     |
 | `npm test`      | vitest unit tests          |
-| `npm run realtime` | standalone WebSocket hub on :4000 |
+| `npm run realtime` | standalone WebSocket hub on :30021 |
 
 ## Notes
 

@@ -1,6 +1,6 @@
 import { startHub } from "./hub";
 
-const port = Number(process.env.REALTIME_PORT ?? 4000);
+const port = Number(process.env.REALTIME_PORT ?? 30021);
 const secret = process.env.REALTIME_SECRET;
 if (!secret) {
   console.error("[realtime] REALTIME_SECRET is required");
