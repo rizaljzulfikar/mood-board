@@ -329,7 +329,7 @@ export function Board({
           });
           if (res.ok) {
             const data = (await res.json()) as { item: ItemState };
-            setItemsBoth([...itemsRef.current, data.item]);
+            setItemsBoth(mergeRemoteItems(itemsRef.current, [data.item], [], [...lockedRef.current]));
             select({ kind: "item", id: data.item.id });
           }
         }
@@ -461,7 +461,11 @@ export function Board({
       });
       if (!res.ok) return;
       const data = (await res.json()) as { connection: ConnectionState };
-      setConnectionsBoth([...connectionsRef.current, data.connection]);
+      // Merge, don't append: the hub echoes our own creation back, and the
+      // echo can beat the POST response (duplicate React keys otherwise).
+      setConnectionsBoth(
+        mergeRemoteEntities(connectionsRef.current, [data.connection], [], [])
+      );
       commitSettled();
     },
     [commitSettled, projectId, setConnectionsBoth]
@@ -480,7 +484,7 @@ export function Board({
     });
     if (!res.ok) return;
     const data = (await res.json()) as { group: GroupState };
-    setGroupsBoth([...groupsRef.current, data.group]);
+    setGroupsBoth(mergeRemoteEntities(groupsRef.current, [data.group], [], [...lockedRef.current]));
     commitSettled();
     select({ kind: "group", id: data.group.id });
     setLabelEdit({ id: data.group.id, draft: "", target: "group" });
@@ -502,7 +506,7 @@ export function Board({
           return data.error ?? "Could not import that link";
         }
         const data = (await res.json()) as { item: ItemState };
-        setItemsBoth([...itemsRef.current, data.item]);
+        setItemsBoth(mergeRemoteItems(itemsRef.current, [data.item], [], [...lockedRef.current]));
         commitSettled();
         select({ kind: "item", id: data.item.id });
         return null;
@@ -664,7 +668,7 @@ export function Board({
     });
     if (!res.ok) return;
     const data = (await res.json()) as { item: ItemState };
-    setItemsBoth([...itemsRef.current, data.item]);
+    setItemsBoth(mergeRemoteItems(itemsRef.current, [data.item], [], [...lockedRef.current]));
     commitSettled();
     select({ kind: "item", id: data.item.id });
     setNoteEdit({ id: data.item.id, draft: data.item.content });
